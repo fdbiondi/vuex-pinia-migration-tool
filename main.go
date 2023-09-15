@@ -24,5 +24,5 @@ func main() {
 
 	fmt.Printf("source path '%s'", src_path)
 
-	tool.Migrate(output_path)
+	tool.Transform(output_path)
 }

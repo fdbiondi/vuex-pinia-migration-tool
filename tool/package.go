@@ -1,14 +1,16 @@
 package tool
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
-func Migrate(dest_dir string) {
+func Transform(dest_dir string) {
 	current_path := ""
 	files_to_process := []string{}
 
@@ -23,7 +25,7 @@ func Migrate(dest_dir string) {
 		}
 
 		if !strings.Contains(path, current_path) {
-			readAndTransform(files_to_process, dest_dir)
+			translateFiles(files_to_process, dest_dir)
 
 			files_to_process = []string{}
 			fmt.Println("")
@@ -49,41 +51,50 @@ func Migrate(dest_dir string) {
 	}
 }
 
-func readAndTransform(files []string, dest_dir string) {
+func translateFiles(files []string, dest_dir string) {
 	fmt.Printf("directory output '%s'\n", dest_dir)
 	fmt.Println("")
-
-	// files_to_process := []*os.File{}
-	// runtime := goja.New()
 
 	for _, origin_filepath := range files {
 		fmt.Println("filename => ", origin_filepath)
 		fmt.Println("------------------------")
 
-		file, err := os.Open(origin_filepath)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// _, err = runtime.RunString(string(file))
-		// if err != nil {
-		// 	fmt.Println("Error evaluating JavaScript code:", err)
-		// 	return
-		// }
-
-		defer file.Close()
-		// files_to_process = append(files_to_process, file)
-
-		// scanner := bufio.NewScanner(file)
-		// for scanner.Scan() {
-		// fmt.Println(scanner.Text())
-		// }
-
-		// if err := scanner.Err(); err != nil {
-		// 	log.Fatal(err)
-		// }
+		readFile(origin_filepath)
 
 		fmt.Println("------------------------")
 		fmt.Println("")
+		// break
+	}
+}
+
+func readFile(path string) {
+	// files_to_process := []*os.File{}
+
+	// file, err := os.ReadFile(path)
+	file, err := os.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	// files_to_process = append(files_to_process, file)
+
+	scanner := bufio.NewScanner(file)
+
+	funcPattern := regexp.MustCompile(`(\w+)\s*\(.*{|(\w+)\s*\(\n.*\n\)\s+{`)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Check if the line contains a function declaration
+		if match := funcPattern.FindStringSubmatch(line); match != nil {
+			// The first element of match is the full match,
+			// and the second element is the function name
+			functionName := match[1]
+			fmt.Println("Found function:", functionName)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
 	}
 }
