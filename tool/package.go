@@ -14,8 +14,11 @@ import (
 func Transform(destDir string) error {
 	currentPath := ""
 	filesToProcess := []string{}
+	checkMem := false
 
-	PrintMemUsage()
+	if checkMem {
+		PrintMemUsage()
+	}
 
 	err := filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -28,7 +31,11 @@ func Transform(destDir string) error {
 		}
 
 		if !strings.Contains(path, currentPath) {
-			translateFiles(filesToProcess, destDir)
+			fmt.Println("------------------------")
+			translateFiles(filesToProcess)
+
+			fmt.Println("------------------------")
+			fmt.Println()
 
 			filesToProcess = []string{}
 		}
@@ -47,14 +54,14 @@ func Transform(destDir string) error {
 		fmt.Println("Err: ", err)
 	}
 
+	if checkMem {
+		PrintMemUsage()
+	}
+
 	return err
 }
 
-func translateFiles(files []string, destDir string) {
-	fmt.Println()
-	fmt.Printf("directory output '%s'", destDir)
-	fmt.Println()
-
+func translateFiles(files []string) {
 	filesMap := make(map[string]*os.File)
 
 	for _, originFilepath := range files {
@@ -69,12 +76,6 @@ func translateFiles(files []string, destDir string) {
 	}
 
 	parseActions(filesMap)
-
-	fmt.Println()
-	fmt.Println("------------------------")
-	fmt.Println("------------------------")
-
-	PrintMemUsage()
 }
 
 func removeExtension(path string) string {
@@ -91,37 +92,73 @@ func parseActions(filesMap map[string]*os.File) {
 		return
 	}
 
-	fmt.Println("parsing: ", file.Name())
+	fmt.Printf("parsing: %s\n\n", file.Name())
 	scanner := bufio.NewScanner(file)
 
-	functionPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)\s{$`)
+	functionPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
 	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
+	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
 
 	var lines []string
-	var commitFuncs []string
-	var dispatchFuncs []string
+	var commitFns []string
+	var dispatchFns []string
+	var actions []string
+
+	var startNewFn bool
+	var actionCount int
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		if match := functionPattern.FindStringSubmatch(line); match != nil {
-			line = functionPattern.ReplaceAllString(line, "$1($3)")
+			startNewFn = true
+
+			line = functionPattern.ReplaceAllString(line, "$1($3)$4")
+			actions = append(actions, match[1])
+
+		} else {
+			startNewFn = false
+		}
+
+		if match := statePattern.FindStringSubmatch(line); match != nil {
+			line = statePattern.ReplaceAllString(line, "this.$2")
 		}
 
 		if match := commitNDispatchPattern.FindStringSubmatch(line); match != nil {
-			commitFuncs = append(commitFuncs, match[1])
+			switch match[1] {
+			case "commit":
+				commitFns = append(commitFns, match[2])
+			case "dispatch":
+				dispatchFns = append(dispatchFns, match[2])
+			}
 
 			if strings.Contains(match[3], "root: true") {
-				storeName := strings.Split(match[2], "/")[0]
-				funcName := strings.Split(match[2], "/")[1]
+				fn := strings.Split(match[2], "/")
+				storeFn := fmt.Sprintf("%s%sStore", "use", capitalizeByteSlice(fn[0]))
+				storeName := fmt.Sprint(fn[0], "Store")
+				fnName := fn[1]
 				args := strings.Replace(match[3], ", { root: true }", "", 1)
 
-				line = commitNDispatchPattern.ReplaceAllString(line, fmt.Sprintf("%s.%s(%s)", storeName, funcName, args))
+				line = commitNDispatchPattern.ReplaceAllString(line, fmt.Sprintf("%s.%s(%s)", storeName, fnName, args))
+
+				// get instance of root store
+				line = fmt.Sprintf("\t\tconst %s = %s()\n%s", storeName, storeFn, line)
+
+				// create import statement of store
+				importLine := fmt.Sprintf("import %s from '%s'\n", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
+
+				// TODO check that import statement not exists (sg: can use map to check)
+				// add import statement to first line
+				lines = append([]string{importLine}, lines...)
 			} else {
 				line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
 			}
 
 			line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
+		}
+
+		if startNewFn {
+			actionCount++
 		}
 
 		lines = append(lines, line)
@@ -136,9 +173,19 @@ func parseActions(filesMap map[string]*os.File) {
 		log.Fatal(err)
 	}
 
-	fmt.Println("commit funcs: ", commitFuncs)
-	fmt.Println("dispatch funcs: ", dispatchFuncs)
-	fmt.Println()
+	fmt.Println("action count: ", actionCount)
+	fmt.Println("actions: ", actions)
+	fmt.Println("commit functions: ", commitFns)
+	fmt.Println("dispatch functions: ", dispatchFns)
+}
+
+func capitalizeByteSlice(str string) string {
+	bs := []byte(str)
+	if len(bs) == 0 {
+		return ""
+	}
+	bs[0] = byte(bs[0] - 32)
+	return string(bs)
 }
 
 // PrintMemUsage outputs the current, total and OS memory being used. As well as the number of garage collection cycles completed.

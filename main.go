@@ -22,7 +22,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("source path '%s'", srcPath)
+	fmt.Printf("source path '%s'\n", srcPath)
+	fmt.Printf("output path '%s'\n\n", outputPath)
 
 	tool.Transform(outputPath)
 }
