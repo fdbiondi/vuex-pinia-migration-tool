@@ -7,41 +7,38 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
-func Transform(dest_dir string) {
-	current_path := ""
-	files_to_process := []string{}
+func Transform(destDir string) error {
+	currentPath := ""
+	filesToProcess := []string{}
 
-	err := filepath.Walk(dest_dir, func(path string, info os.FileInfo, err error) error {
+	PrintMemUsage()
+
+	err := filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println("Err: ", err)
 			return err
 		}
 
-		if dest_dir == path {
+		if destDir == path {
 			return nil
 		}
 
-		if !strings.Contains(path, current_path) {
-			translateFiles(files_to_process, dest_dir)
+		if !strings.Contains(path, currentPath) {
+			translateFiles(filesToProcess, destDir)
 
-			files_to_process = []string{}
-			fmt.Println("")
-
+			filesToProcess = []string{}
 		}
 
 		if info.IsDir() {
-			// current_dir = strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
-			current_path = path
-			fmt.Println("")
-			// fmt.Println("current_dir: ", strings.ToUpper(current_dir))
-
+			currentPath = path
 			return nil
 		}
 
-		files_to_process = append(files_to_process, path)
+		filesToProcess = append(filesToProcess, path)
 
 		return nil
 	})
@@ -49,52 +46,113 @@ func Transform(dest_dir string) {
 	if err != nil {
 		fmt.Println("Err: ", err)
 	}
+
+	return err
 }
 
-func translateFiles(files []string, dest_dir string) {
-	fmt.Printf("directory output '%s'\n", dest_dir)
-	fmt.Println("")
+func translateFiles(files []string, destDir string) {
+	fmt.Println()
+	fmt.Printf("directory output '%s'", destDir)
+	fmt.Println()
 
-	for _, origin_filepath := range files {
-		fmt.Println("filename => ", origin_filepath)
-		fmt.Println("------------------------")
+	filesMap := make(map[string]*os.File)
 
-		readFile(origin_filepath)
+	for _, originFilepath := range files {
+		file, err := os.Open(originFilepath)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer file.Close()
 
-		fmt.Println("------------------------")
-		fmt.Println("")
-		// break
+		filename := removeExtension(getFilename(file.Name()))
+		filesMap[filename] = file
 	}
+
+	parseActions(filesMap)
+
+	fmt.Println()
+	fmt.Println("------------------------")
+	fmt.Println("------------------------")
+
+	PrintMemUsage()
 }
 
-func readFile(path string) {
-	// files_to_process := []*os.File{}
+func removeExtension(path string) string {
+	return strings.Split(path, ".")[0]
+}
 
-	// file, err := os.ReadFile(path)
-	file, err := os.Open(path)
-	if err != nil {
-		log.Fatal(err)
+func getFilename(path string) string {
+	return strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
+}
+
+func parseActions(filesMap map[string]*os.File) {
+	file, ok := filesMap["actions"]
+	if !ok {
+		return
 	}
-	defer file.Close()
 
-	// files_to_process = append(files_to_process, file)
-
+	fmt.Println("parsing: ", file.Name())
 	scanner := bufio.NewScanner(file)
 
-	funcPattern := regexp.MustCompile(`(\w+)\s*\(.*{|(\w+)\s*\(\n.*\n\)\s+{`)
+	functionPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)\s{$`)
+	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
+
+	var lines []string
+	var commitFuncs []string
+	var dispatchFuncs []string
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		// Check if the line contains a function declaration
-		if match := funcPattern.FindStringSubmatch(line); match != nil {
-			// The first element of match is the full match,
-			// and the second element is the function name
-			functionName := match[1]
-			fmt.Println("Found function:", functionName)
+
+		if match := functionPattern.FindStringSubmatch(line); match != nil {
+			line = functionPattern.ReplaceAllString(line, "$1($3)")
 		}
+
+		if match := commitNDispatchPattern.FindStringSubmatch(line); match != nil {
+			commitFuncs = append(commitFuncs, match[1])
+
+			if strings.Contains(match[3], "root: true") {
+				storeName := strings.Split(match[2], "/")[0]
+				funcName := strings.Split(match[2], "/")[1]
+				args := strings.Replace(match[3], ", { root: true }", "", 1)
+
+				line = commitNDispatchPattern.ReplaceAllString(line, fmt.Sprintf("%s.%s(%s)", storeName, funcName, args))
+			} else {
+				line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
+			}
+
+			line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
+		}
+
+		lines = append(lines, line)
 	}
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
+
+	err := os.WriteFile(file.Name(), []byte(strings.Join(lines, "\n")), 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("commit funcs: ", commitFuncs)
+	fmt.Println("dispatch funcs: ", dispatchFuncs)
+	fmt.Println()
+}
+
+// PrintMemUsage outputs the current, total and OS memory being used. As well as the number of garage collection cycles completed.
+func PrintMemUsage() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+	fmt.Printf("Alloc = %v MiB", bToMb(m.Alloc))
+	fmt.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
+	fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
+	fmt.Printf("\tNumGC = %v\n", m.NumGC)
+}
+
+func bToMb(b uint64) uint64 {
+	return b / 1024 / 1024
 }
