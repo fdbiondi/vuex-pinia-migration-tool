@@ -75,6 +75,7 @@ func translateFiles(files []string) {
 		filesMap[filename] = file
 	}
 
+	parseMutations(filesMap)
 	parseActions(filesMap)
 }
 
@@ -86,6 +87,15 @@ func getFilename(path string) string {
 	return strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
 }
 
+func parseMutations(filesMap map[string]*os.File) {
+	file, ok := filesMap["mutations"]
+	if !ok {
+		return
+	}
+
+	fmt.Printf("parsing: %s\n\n", file.Name())
+}
+
 func parseActions(filesMap map[string]*os.File) {
 	file, ok := filesMap["actions"]
 	if !ok {
@@ -95,10 +105,6 @@ func parseActions(filesMap map[string]*os.File) {
 	fmt.Printf("parsing: %s\n\n", file.Name())
 	scanner := bufio.NewScanner(file)
 
-	functionPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
-	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
-	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
-
 	var lines []string
 	var commitFns []string
 	var dispatchFns []string
@@ -106,6 +112,10 @@ func parseActions(filesMap map[string]*os.File) {
 
 	var startNewFn bool
 	var actionCount int
+
+	functionPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
+	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
+	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
