@@ -75,7 +75,6 @@ func translateFiles(files []string) {
 		filesMap[filename] = file
 	}
 
-
 	var mutationsLines = parseMutations(filesMap)
 	var actionsLines = parseActions(filesMap)
 
@@ -133,7 +132,7 @@ func parseMutations(filesMap map[string]*os.File) []string {
 	var isFn = false
 
 	mutObjPattern := regexp.MustCompile(`mutations\s=\s\{$|export\sdefault\s\{$`)
-	fnPattern := regexp.MustCompile(`\b(\w+)\((\{.+\}|\w+)((,\s(.*))\)|\))((\:\s.+)?\s{)$`)
+	fnPattern := regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`)
 	endOfFunctionPattern := regexp.MustCompile(`\s\s\},?`)
 	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
 
@@ -186,27 +185,43 @@ func parseActions(filesMap map[string]*os.File) []string {
 	scanner := bufio.NewScanner(file)
 
 	var lines []string
-	var commitFns []string
-	var dispatchFns []string
-	var actions []string
+	var multiLineFn = []string{}
+	var multiLine = []string{}
 
-	var startNewFn bool
+	var commitStats []string
+	var dispatchStats []string
+	var actionsStats []string
+
 	var actionCount int
 
-	fnPattern := regexp.MustCompile(`\b(\w+)\((\{.+\}|\w+)((,\s(.*))\)|\))((\:\s.+)?\s{)$`)
+	fnPattern := regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`)
 	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
 	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
+		if regexp.MustCompile(`^\s{2}(async\s)?(\w)+\($`).FindStringSubmatch(line) != nil {
+			multiLineFn = append(multiLineFn, strings.TrimSpace(line))
+
+			continue
+		} else if len(multiLineFn) > 0 {
+			multiLineFn = append(multiLineFn, strings.TrimSpace(line))
+
+			if regexp.MustCompile(`\s{2}\)\s{$`).FindStringSubmatch(line) != nil {
+				line = fmt.Sprintf("  %s", strings.Join(multiLineFn, ""))
+
+				multiLineFn = []string{}
+			} else {
+				continue
+			}
+		}
+
 		if match := fnPattern.FindStringSubmatch(line); match != nil {
-			startNewFn = true
+			actionCount++
 
 			line = fnPattern.ReplaceAllString(line, "$1($5)$6")
-			actions = append(actions, match[1])
-		} else {
-			startNewFn = false
+			actionsStats = append(actionsStats, match[1])
 		}
 
 		if statePattern.FindStringSubmatch(line) != nil {
@@ -216,9 +231,9 @@ func parseActions(filesMap map[string]*os.File) []string {
 		if match := commitNDispatchPattern.FindStringSubmatch(line); match != nil {
 			switch match[1] {
 			case "commit":
-				commitFns = append(commitFns, match[2])
+				commitStats = append(commitStats, match[2])
 			case "dispatch":
-				dispatchFns = append(dispatchFns, match[2])
+				dispatchStats = append(dispatchStats, match[2])
 			}
 
 			if strings.Contains(match[3], "root: true") {
@@ -234,7 +249,7 @@ func parseActions(filesMap map[string]*os.File) []string {
 				line = fmt.Sprintf("\t\tconst %s = %s()\n%s", storeName, storeFn, line)
 
 				// create import statement of store
-				importLine := fmt.Sprintf("import %s from '%s'\n", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
+				importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
 
 				// TODO check that import statement not exists (sg: can use map to check)
 				// add import statement to first line
@@ -246,10 +261,6 @@ func parseActions(filesMap map[string]*os.File) []string {
 			line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
 		}
 
-		if startNewFn {
-			actionCount++
-		}
-
 		lines = append(lines, line)
 	}
 
@@ -257,15 +268,12 @@ func parseActions(filesMap map[string]*os.File) []string {
 		log.Fatal(err)
 	}
 
-	// err := os.WriteFile(file.Name(), []byte(strings.Join(lines, "\n")), 0644)
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
 	fmt.Println("action count: ", actionCount)
-	fmt.Println("actions: ", actions)
-	fmt.Println("commit functions: ", commitFns)
-	fmt.Println("dispatch functions: ", dispatchFns)
+	if false {
+		fmt.Println("actions: ", actionsStats)
+		fmt.Println("commit functions: ", commitStats)
+		fmt.Println("dispatch functions: ", dispatchStats)
+	}
 
 	return lines
 }
