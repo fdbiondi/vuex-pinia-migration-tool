@@ -75,8 +75,30 @@ func translateFiles(files []string) {
 		filesMap[filename] = file
 	}
 
-	parseMutations(filesMap)
-	parseActions(filesMap)
+
+	var mutationsLines = parseMutations(filesMap)
+	var actionsLines = parseActions(filesMap)
+
+	for index := len(actionsLines) - 1; index >= 0; index-- {
+		// search latest line after close actions object
+		if regexp.MustCompile(`^\};$`).FindStringSubmatch(actionsLines[index]) != nil {
+			// insert mutations functions inside actions object
+			for lineIndex, line := range mutationsLines {
+				actionsLines = insert(actionsLines, index+lineIndex, line)
+			}
+		}
+	}
+
+	// get actions file to write lines
+	file, ok := filesMap["actions"]
+	if !ok {
+		log.Fatal("actions file not found")
+	}
+	// write actions into output file
+	err := os.WriteFile(file.Name(), []byte(strings.Join(actionsLines, "\n")), 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func removeExtension(path string) string {
@@ -87,19 +109,84 @@ func getFilename(path string) string {
 	return strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
 }
 
-func parseMutations(filesMap map[string]*os.File) {
+func insert(array []string, index int, value string) []string {
+	if len(array) == index {
+		return append(array, value)
+	}
+	array = append(array[:index+1], array[index:]...)
+	array[index] = value
+	return array
+}
+
+func parseMutations(filesMap map[string]*os.File) []string {
 	file, ok := filesMap["mutations"]
 	if !ok {
-		return
+		return []string{}
 	}
 
 	fmt.Printf("parsing: %s\n\n", file.Name())
+	scanner := bufio.NewScanner(file)
+
+	var lines []string
+	var insideMutations = false
+	var index = -1
+	var isFn = false
+
+	mutObjPattern := regexp.MustCompile(`mutations\s=\s\{$|export\sdefault\s\{$`)
+	fnPattern := regexp.MustCompile(`^\s{2}(\w+\s)?\w+\(.*\)\s\{$`)
+	fnArgsPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
+	fnNotArgsPattern := regexp.MustCompile(`\b(\w+)\((.*)\)(\s{)$`)
+	endOfFunctionPattern := regexp.MustCompile(`\s\s\},?`)
+	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if mutObjPattern.FindStringSubmatch(line) != nil {
+			insideMutations = true
+		}
+
+		if insideMutations {
+			if fnPattern.FindStringSubmatch(line) != nil {
+				index++
+				isFn = true
+			}
+
+			if fnArgsPattern.FindStringSubmatch(line) != nil {
+				line = fnArgsPattern.ReplaceAllString(line, "$1($3)$4")
+			} else if fnNotArgsPattern.FindStringSubmatch(line) != nil {
+				line = fnNotArgsPattern.ReplaceAllString(line, "$1()$3")
+			}
+
+			if statePattern.FindStringSubmatch(line) != nil {
+				line = statePattern.ReplaceAllString(line, "this.$2")
+			}
+		}
+
+		if isFn && index >= 0 {
+			if len(lines) > index {
+				lines[index] += "\n" + line
+			} else {
+				lines = append(lines, line)
+			}
+		}
+
+		if endOfFunctionPattern.FindStringSubmatch(line) != nil {
+			isFn = false
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
+	}
+
+	return lines
 }
 
-func parseActions(filesMap map[string]*os.File) {
+func parseActions(filesMap map[string]*os.File) []string {
 	file, ok := filesMap["actions"]
 	if !ok {
-		return
+		return []string{}
 	}
 
 	fmt.Printf("parsing: %s\n\n", file.Name())
@@ -113,24 +200,30 @@ func parseActions(filesMap map[string]*os.File) {
 	var startNewFn bool
 	var actionCount int
 
-	functionPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
+	fnPattern := regexp.MustCompile(`^\s{2}(\w+\s)?\w+\(.*\)\s\{$`)
+	fnArgsPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
+	fnNotArgsPattern := regexp.MustCompile(`\b(\w+)\((.*)\)(\s{)$`)
 	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
 	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if match := functionPattern.FindStringSubmatch(line); match != nil {
+		if fnPattern.FindStringSubmatch(line) != nil {
 			startNewFn = true
 
-			line = functionPattern.ReplaceAllString(line, "$1($3)$4")
-			actions = append(actions, match[1])
-
+			if match := fnArgsPattern.FindStringSubmatch(line); match != nil {
+				line = fnArgsPattern.ReplaceAllString(line, "$1($3)$4")
+				actions = append(actions, match[1])
+			} else if match := fnNotArgsPattern.FindStringSubmatch(line); match != nil {
+				line = fnNotArgsPattern.ReplaceAllString(line, "$1$3")
+				actions = append(actions, match[1])
+			}
 		} else {
 			startNewFn = false
 		}
 
-		if match := statePattern.FindStringSubmatch(line); match != nil {
+		if statePattern.FindStringSubmatch(line) != nil {
 			line = statePattern.ReplaceAllString(line, "this.$2")
 		}
 
@@ -178,15 +271,17 @@ func parseActions(filesMap map[string]*os.File) {
 		log.Fatal(err)
 	}
 
-	err := os.WriteFile(file.Name(), []byte(strings.Join(lines, "\n")), 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
+	// err := os.WriteFile(file.Name(), []byte(strings.Join(lines, "\n")), 0644)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	fmt.Println("action count: ", actionCount)
 	fmt.Println("actions: ", actions)
 	fmt.Println("commit functions: ", commitFns)
 	fmt.Println("dispatch functions: ", dispatchFns)
+
+	return lines
 }
 
 func capitalizeByteSlice(str string) string {
