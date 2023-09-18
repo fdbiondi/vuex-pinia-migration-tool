@@ -133,9 +133,7 @@ func parseMutations(filesMap map[string]*os.File) []string {
 	var isFn = false
 
 	mutObjPattern := regexp.MustCompile(`mutations\s=\s\{$|export\sdefault\s\{$`)
-	fnPattern := regexp.MustCompile(`^\s{2}(\w+\s)?\w+\(.*\)\s\{$`)
-	fnArgsPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
-	fnNotArgsPattern := regexp.MustCompile(`\b(\w+)\((.*)\)(\s{)$`)
+	fnPattern := regexp.MustCompile(`\b(\w+)\((\{.+\}|\w+)((,\s(.*))\)|\))((\:\s.+)?\s{)$`)
 	endOfFunctionPattern := regexp.MustCompile(`\s\s\},?`)
 	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
 
@@ -150,12 +148,7 @@ func parseMutations(filesMap map[string]*os.File) []string {
 			if fnPattern.FindStringSubmatch(line) != nil {
 				index++
 				isFn = true
-			}
-
-			if fnArgsPattern.FindStringSubmatch(line) != nil {
-				line = fnArgsPattern.ReplaceAllString(line, "$1($3)$4")
-			} else if fnNotArgsPattern.FindStringSubmatch(line) != nil {
-				line = fnNotArgsPattern.ReplaceAllString(line, "$1()$3")
+				line = fnPattern.ReplaceAllString(line, "$1($5)$6")
 			}
 
 			if statePattern.FindStringSubmatch(line) != nil {
@@ -200,25 +193,18 @@ func parseActions(filesMap map[string]*os.File) []string {
 	var startNewFn bool
 	var actionCount int
 
-	fnPattern := regexp.MustCompile(`^\s{2}(\w+\s)?\w+\(.*\)\s\{$`)
-	fnArgsPattern := regexp.MustCompile(`\b(\w+)\((.+),\s(.*)\)(\s{)$`)
-	fnNotArgsPattern := regexp.MustCompile(`\b(\w+)\((.*)\)(\s{)$`)
+	fnPattern := regexp.MustCompile(`\b(\w+)\((\{.+\}|\w+)((,\s(.*))\)|\))((\:\s.+)?\s{)$`)
 	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
 	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if fnPattern.FindStringSubmatch(line) != nil {
+		if match := fnPattern.FindStringSubmatch(line); match != nil {
 			startNewFn = true
 
-			if match := fnArgsPattern.FindStringSubmatch(line); match != nil {
-				line = fnArgsPattern.ReplaceAllString(line, "$1($3)$4")
-				actions = append(actions, match[1])
-			} else if match := fnNotArgsPattern.FindStringSubmatch(line); match != nil {
-				line = fnNotArgsPattern.ReplaceAllString(line, "$1$3")
-				actions = append(actions, match[1])
-			}
+			line = fnPattern.ReplaceAllString(line, "$1($5)$6")
+			actions = append(actions, match[1])
 		} else {
 			startNewFn = false
 		}
