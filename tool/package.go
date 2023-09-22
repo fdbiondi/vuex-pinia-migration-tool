@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 )
 
@@ -93,6 +94,7 @@ func translateFiles(files []string) {
 	if !ok {
 		log.Fatal("actions file not found")
 	}
+
 	// write actions into output file
 	err := os.WriteFile(file.Name(), []byte(strings.Join(actionsLines, "\n")), 0644)
 	if err != nil {
@@ -186,7 +188,8 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 	var lines []string
 	var multiLineFn = []string{}
-	var multiLine = []string{}
+	// var multiLine = []string{}
+	var importedStores = []string{}
 
 	var commitStats []string
 	var dispatchStats []string
@@ -238,7 +241,7 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 			if strings.Contains(match[3], "root: true") {
 				fn := strings.Split(match[2], "/")
-				storeFn := fmt.Sprintf("%s%sStore", "use", capitalizeByteSlice(fn[0]))
+				storeFn := fmt.Sprintf("use%sStore", capitalizeByteSlice(fn[0]))
 				storeName := fmt.Sprint(fn[0], "Store")
 				fnName := fn[1]
 				args := strings.Replace(match[3], ", { root: true }", "", 1)
@@ -248,12 +251,16 @@ func parseActions(filesMap map[string]*os.File) []string {
 				// get instance of root store
 				line = fmt.Sprintf("\t\tconst %s = %s()\n%s", storeName, storeFn, line)
 
-				// create import statement of store
-				importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
+				if !slices.Contains(importedStores, storeName) {
+					// create import statement of store
+					importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
 
-				// TODO check that import statement not exists (sg: can use map to check)
-				// add import statement to first line
-				lines = append([]string{importLine}, lines...)
+					// TODO check that import statement not exists (sg: can use map to check)
+					// add import statement to first line
+					lines = append([]string{importLine}, lines...)
+					importedStores = append(importedStores, storeName)
+				}
+
 			} else {
 				line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
 			}
