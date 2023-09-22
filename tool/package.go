@@ -188,8 +188,9 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 	var lines []string
 	var multiLineFn = []string{}
-	// var multiLine = []string{}
 	var importedStores = []string{}
+	var intantiatedStores = []string{}
+	// var multiLine = []string{}
 
 	var commitStats []string
 	var dispatchStats []string
@@ -225,6 +226,8 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 			line = fnPattern.ReplaceAllString(line, "$1($5)$6")
 			actionsStats = append(actionsStats, match[1])
+
+			intantiatedStores = []string{}
 		}
 
 		if statePattern.FindStringSubmatch(line) != nil {
@@ -248,8 +251,11 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 				line = commitNDispatchPattern.ReplaceAllString(line, fmt.Sprintf("%s.%s(%s)", storeName, fnName, args))
 
-				// get instance of root store
-				line = fmt.Sprintf("\t\tconst %s = %s()\n%s", storeName, storeFn, line)
+				if !slices.Contains(intantiatedStores, storeName) {
+					// get instance of root store
+					line = fmt.Sprintf("\t\tconst %s = %s()\n%s", storeName, storeFn, line)
+					intantiatedStores = append(intantiatedStores, storeName)
+				}
 
 				if !slices.Contains(importedStores, storeName) {
 					// create import statement of store
