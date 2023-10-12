@@ -1,4 +1,4 @@
-package tool
+package parser
 
 import (
 	"bufio"
@@ -13,8 +13,8 @@ import (
 )
 
 func Transform(destDir string) error {
+    filesInModule := []string{}
 	currentPath := ""
-	filesToProcess := []string{}
 	checkMem := false
 
 	if checkMem {
@@ -32,13 +32,15 @@ func Transform(destDir string) error {
 		}
 
 		if !strings.Contains(path, currentPath) {
+            // pass current files inside a module to translation function
 			fmt.Println("------------------------")
-			translateFiles(filesToProcess)
+			translateModule(filesInModule)
 
 			fmt.Println("------------------------")
 			fmt.Println()
 
-			filesToProcess = []string{}
+            // clean current module files
+			filesInModule = []string{}
 		}
 
 		if info.IsDir() {
@@ -46,7 +48,8 @@ func Transform(destDir string) error {
 			return nil
 		}
 
-		filesToProcess = append(filesToProcess, path)
+        // add files to current module
+		filesInModule = append(filesInModule, path)
 
 		return nil
 	})
@@ -62,9 +65,10 @@ func Transform(destDir string) error {
 	return err
 }
 
-func translateFiles(files []string) {
-	filesMap := make(map[string]*os.File)
+func translateModule(files []string) {
+	filesMap := make(map[string]*os.File) // will have actions, mutations, state, getters keys
 
+    // open and save files to the map
 	for _, originFilepath := range files {
 		file, err := os.Open(originFilepath)
 		if err != nil {
@@ -79,6 +83,7 @@ func translateFiles(files []string) {
 	var mutationsLines = parseMutations(filesMap)
 	var actionsLines = parseActions(filesMap)
 
+    // append mutations into actions file
 	for index := len(actionsLines) - 1; index >= 0; index-- {
 		// search latest line after close actions object
 		if regexp.MustCompile(`^\};$`).FindStringSubmatch(actionsLines[index]) != nil {
@@ -100,23 +105,6 @@ func translateFiles(files []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func removeExtension(path string) string {
-	return strings.Split(path, ".")[0]
-}
-
-func getFilename(path string) string {
-	return strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
-}
-
-func insert(array []string, index int, value string) []string {
-	if len(array) == index {
-		return append(array, value)
-	}
-	array = append(array[:index+1], array[index:]...)
-	array[index] = value
-	return array
 }
 
 func parseMutations(filesMap map[string]*os.File) []string {
@@ -314,4 +302,21 @@ func PrintMemUsage() {
 
 func bToMb(b uint64) uint64 {
 	return b / 1024 / 1024
+}
+
+func removeExtension(path string) string {
+	return strings.Split(path, ".")[0]
+}
+
+func getFilename(path string) string {
+	return strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
+}
+
+func insert(array []string, index int, value string) []string {
+	if len(array) == index {
+		return append(array, value)
+	}
+	array = append(array[:index+1], array[index:]...)
+	array[index] = value
+	return array
 }

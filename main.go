@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"tool"
+	"parser"
 )
 
 func main() {
@@ -25,5 +25,5 @@ func main() {
 	fmt.Printf("source path '%s'\n", srcPath)
 	fmt.Printf("output path '%s'\n\n", outputPath)
 
-	tool.Transform(outputPath)
+	parser.Transform(outputPath)
 }
