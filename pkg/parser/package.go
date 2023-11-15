@@ -1,21 +1,18 @@
 package parser
 
 import (
-	"bufio"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
-	"slices"
 	"strings"
 )
+var checkMem = false
 
 func Transform(destDir string) error {
-    filesInModule := []string{}
+	filesInModule := []string{}
 	currentPath := ""
-	checkMem := false
 
 	if checkMem {
 		PrintMemUsage()
@@ -32,14 +29,14 @@ func Transform(destDir string) error {
 		}
 
 		if !strings.Contains(path, currentPath) {
-            // pass current files inside a module to translation function
+			// pass current files inside a module to translation function
 			fmt.Println("------------------------")
 			translateModule(filesInModule)
 
 			fmt.Println("------------------------")
 			fmt.Println()
 
-            // clean current module files
+			// clean current module files
 			filesInModule = []string{}
 		}
 
@@ -48,7 +45,7 @@ func Transform(destDir string) error {
 			return nil
 		}
 
-        // add files to current module
+		// add files to current module
 		filesInModule = append(filesInModule, path)
 
 		return nil
@@ -68,7 +65,7 @@ func Transform(destDir string) error {
 func translateModule(files []string) {
 	filesMap := make(map[string]*os.File) // will have actions, mutations, state, getters keys
 
-    // open and save files to the map
+	// open and save files to the map
 	for _, originFilepath := range files {
 		file, err := os.Open(originFilepath)
 		if err != nil {
@@ -83,13 +80,13 @@ func translateModule(files []string) {
 	var mutationsLines = parseMutations(filesMap)
 	var actionsLines = parseActions(filesMap)
 
-    // append mutations into actions file
+	// append mutations into actions file
 	for index := len(actionsLines) - 1; index >= 0; index-- {
 		// search latest line after close actions object
 		if regexp.MustCompile(`^\};$`).FindStringSubmatch(actionsLines[index]) != nil {
 			// insert mutations functions inside actions object
 			for lineIndex, line := range mutationsLines {
-				actionsLines = insert(actionsLines, index+lineIndex, line)
+				actionsLines = insertLine(actionsLines, index+lineIndex, line)
 			}
 		}
 	}
@@ -105,218 +102,4 @@ func translateModule(files []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-}
-
-func parseMutations(filesMap map[string]*os.File) []string {
-	file, ok := filesMap["mutations"]
-	if !ok {
-		return []string{}
-	}
-
-	fmt.Printf("parsing: %s\n\n", file.Name())
-	scanner := bufio.NewScanner(file)
-
-	var lines []string
-	var insideMutations = false
-	var index = -1
-	var isFn = false
-
-	mutObjPattern := regexp.MustCompile(`mutations\s=\s\{$|export\sdefault\s\{$`)
-	fnPattern := regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`)
-	endOfFunctionPattern := regexp.MustCompile(`\s\s\},?`)
-	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if mutObjPattern.FindStringSubmatch(line) != nil {
-			insideMutations = true
-		}
-
-		if insideMutations {
-			if fnPattern.FindStringSubmatch(line) != nil {
-				index++
-				isFn = true
-				line = fnPattern.ReplaceAllString(line, "$1($5)$6")
-			}
-
-			if statePattern.FindStringSubmatch(line) != nil {
-				line = statePattern.ReplaceAllString(line, "this.$2")
-			}
-		}
-
-		if isFn && index >= 0 {
-			if len(lines) > index {
-				lines[index] += "\n" + line
-			} else {
-				lines = append(lines, line)
-			}
-		}
-
-		if endOfFunctionPattern.FindStringSubmatch(line) != nil {
-			isFn = false
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	return lines
-}
-
-func parseActions(filesMap map[string]*os.File) []string {
-	file, ok := filesMap["actions"]
-	if !ok {
-		return []string{}
-	}
-
-	fmt.Printf("parsing: %s\n\n", file.Name())
-	scanner := bufio.NewScanner(file)
-
-	var lines []string
-	var multiLineFn = []string{}
-	var importedStores = []string{}
-	var intantiatedStores = []string{}
-	// var multiLine = []string{}
-
-	var commitStats []string
-	var dispatchStats []string
-	var actionsStats []string
-
-	var actionCount int
-
-	fnPattern := regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`)
-	commitNDispatchPattern := regexp.MustCompile(`\b(commit|dispatch)\(["|'](.+?)["|'],?\s?(.*)\)`)
-	statePattern := regexp.MustCompile(`(state\.)(\w+)`)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		if regexp.MustCompile(`^\s{2}(async\s)?(\w)+\($`).FindStringSubmatch(line) != nil {
-			multiLineFn = append(multiLineFn, strings.TrimSpace(line))
-
-			continue
-		} else if len(multiLineFn) > 0 {
-			multiLineFn = append(multiLineFn, strings.TrimSpace(line))
-
-			if regexp.MustCompile(`\s{2}\)\s{$`).FindStringSubmatch(line) != nil {
-				line = fmt.Sprintf("  %s", strings.Join(multiLineFn, ""))
-
-				multiLineFn = []string{}
-			} else {
-				continue
-			}
-		}
-
-		if match := fnPattern.FindStringSubmatch(line); match != nil {
-			actionCount++
-
-			line = fnPattern.ReplaceAllString(line, "$1($5)$6")
-			actionsStats = append(actionsStats, match[1])
-
-			intantiatedStores = []string{}
-		}
-
-		if statePattern.FindStringSubmatch(line) != nil {
-			line = statePattern.ReplaceAllString(line, "this.$2")
-		}
-
-		if match := commitNDispatchPattern.FindStringSubmatch(line); match != nil {
-			switch match[1] {
-			case "commit":
-				commitStats = append(commitStats, match[2])
-			case "dispatch":
-				dispatchStats = append(dispatchStats, match[2])
-			}
-
-			if strings.Contains(match[3], "root: true") {
-				fn := strings.Split(match[2], "/")
-				storeFn := fmt.Sprintf("use%sStore", capitalizeByteSlice(fn[0]))
-				storeName := fmt.Sprint(fn[0], "Store")
-				fnName := fn[1]
-				args := strings.Replace(match[3], ", { root: true }", "", 1)
-
-				line = commitNDispatchPattern.ReplaceAllString(line, fmt.Sprintf("%s.%s(%s)", storeName, fnName, args))
-
-				if !slices.Contains(intantiatedStores, storeName) {
-					// get instance of root store
-					line = fmt.Sprintf("\t\tconst %s = %s()\n%s", storeName, storeFn, line)
-					intantiatedStores = append(intantiatedStores, storeName)
-				}
-
-				if !slices.Contains(importedStores, storeName) {
-					// create import statement of store
-					importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
-
-					// TODO check that import statement not exists (sg: can use map to check)
-					// add import statement to first line
-					lines = append([]string{importLine}, lines...)
-					importedStores = append(importedStores, storeName)
-				}
-
-			} else {
-				line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
-			}
-
-			line = commitNDispatchPattern.ReplaceAllString(line, "this.$2($3)")
-		}
-
-		lines = append(lines, line)
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("action count: ", actionCount)
-	if false {
-		fmt.Println("actions: ", actionsStats)
-		fmt.Println("commit functions: ", commitStats)
-		fmt.Println("dispatch functions: ", dispatchStats)
-	}
-
-	return lines
-}
-
-func capitalizeByteSlice(str string) string {
-	bs := []byte(str)
-	if len(bs) == 0 {
-		return ""
-	}
-	bs[0] = byte(bs[0] - 32)
-	return string(bs)
-}
-
-// PrintMemUsage outputs the current, total and OS memory being used. As well as the number of garage collection cycles completed.
-func PrintMemUsage() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
-	fmt.Printf("Alloc = %v MiB", bToMb(m.Alloc))
-	fmt.Printf("\tTotalAlloc = %v MiB", bToMb(m.TotalAlloc))
-	fmt.Printf("\tSys = %v MiB", bToMb(m.Sys))
-	fmt.Printf("\tNumGC = %v\n", m.NumGC)
-}
-
-func bToMb(b uint64) uint64 {
-	return b / 1024 / 1024
-}
-
-func removeExtension(path string) string {
-	return strings.Split(path, ".")[0]
-}
-
-func getFilename(path string) string {
-	return strings.Split(path, "/")[len(strings.Split(path, "/"))-1]
-}
-
-func insert(array []string, index int, value string) []string {
-	if len(array) == index {
-		return append(array, value)
-	}
-	array = append(array[:index+1], array[index:]...)
-	array[index] = value
-	return array
 }
