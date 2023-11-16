@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 )
+
 var checkMem = false
 
 func Transform(destDir string) error {
@@ -62,6 +63,10 @@ func Transform(destDir string) error {
 	return err
 }
 
+const CLOSE_FUNCTION_CURLY_BRACE = "  },"
+
+const CLOSE_ACTIONS_PATTERN = `^\};$`
+
 func translateModule(files []string) {
 	filesMap := make(map[string]*os.File) // will have actions, mutations, state, getters keys
 
@@ -79,15 +84,27 @@ func translateModule(files []string) {
 
 	var mutationsLines = parseMutations(filesMap)
 	var actionsLines = parseActions(filesMap)
+	var addedComma = false
 
 	// append mutations into actions file
 	for index := len(actionsLines) - 1; index >= 0; index-- {
 		// search latest line after close actions object
-		if regexp.MustCompile(`^\};$`).FindStringSubmatch(actionsLines[index]) != nil {
+		if regexp.MustCompile(CLOSE_ACTIONS_PATTERN).FindStringSubmatch(actionsLines[index]) != nil {
+
+			// this fixes the last action adding a comma at the end of it
+			if !addedComma {
+				actionsLines[index-1] = CLOSE_FUNCTION_CURLY_BRACE
+
+				addedComma = true
+			}
+
 			// insert mutations functions inside actions object
 			for lineIndex, line := range mutationsLines {
-				actionsLines = insertLine(actionsLines, index+lineIndex, line)
+                actionsLines = insertLine(actionsLines, index + (lineIndex * 2 + 0), "")
+                actionsLines = insertLine(actionsLines, index + (lineIndex * 2 + 1), line)
 			}
+
+            break
 		}
 	}
 
