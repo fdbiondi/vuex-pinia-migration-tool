@@ -84,6 +84,7 @@ func translateModule(files []string) {
 
 	var mutationsLines = parseMutations(filesMap)
 	var actionsLines = parseActions(filesMap)
+	var gettersLines = parseGetters(filesMap)
 	var addedComma = false
 
 	// append mutations into actions file
@@ -100,11 +101,11 @@ func translateModule(files []string) {
 
 			// insert mutations functions inside actions object
 			for lineIndex, line := range mutationsLines {
-                actionsLines = insertLine(actionsLines, index + (lineIndex * 2 + 0), "")
-                actionsLines = insertLine(actionsLines, index + (lineIndex * 2 + 1), line)
+				actionsLines = insertLine(actionsLines, index+(lineIndex*2+0), "")
+				actionsLines = insertLine(actionsLines, index+(lineIndex*2+1), line)
 			}
 
-            break
+			break
 		}
 	}
 
@@ -116,6 +117,24 @@ func translateModule(files []string) {
 
 	// write actions into output file
 	err := os.WriteFile(file.Name(), []byte(strings.Join(actionsLines, "\n")), 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// get getters file to write lines
+	file, ok = filesMap["getters"]
+	if !ok {
+		log.Fatal("getters file not found")
+	}
+
+	// write getters into output file
+	err = os.WriteFile(file.Name(), []byte(strings.Join(gettersLines, "\n")), 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// remove mutations file
+	err = os.Remove(filesMap["mutations"].Name())
 	if err != nil {
 		log.Fatal(err)
 	}
