@@ -102,7 +102,6 @@ func parseActions(filesMap map[string]*os.File) []string {
 					// create import statement of store
 					importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
 
-					// TODO check that import statement not exists (sg: can use map to check)
 					// add import statement to first line
 					lines = append([]string{importLine}, lines...)
 					importedStores = append(importedStores, storeName)

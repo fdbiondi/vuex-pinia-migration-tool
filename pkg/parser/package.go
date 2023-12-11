@@ -1,17 +1,23 @@
 package parser
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var checkMem = false
 
-func Transform(destDir string) error {
+func Execute(destDir string) error {
 	filesInModule := []string{}
 	currentPath := ""
 
@@ -32,7 +38,7 @@ func Transform(destDir string) error {
 		if !strings.Contains(path, currentPath) {
 			// pass current files inside a module to translation function
 			fmt.Println("------------------------")
-			translateModule(filesInModule)
+			translate(filesInModule)
 
 			fmt.Println("------------------------")
 			fmt.Println()
@@ -67,7 +73,7 @@ const CLOSE_FUNCTION_CURLY_BRACE = "  },"
 
 const CLOSE_ACTIONS_PATTERN = `^\};$`
 
-func translateModule(files []string) {
+func translate(files []string) {
 	filesMap := make(map[string]*os.File) // will have actions, mutations, state, getters keys
 
 	// open and save files to the map
@@ -138,4 +144,44 @@ func translateModule(files []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// create module entrypoint
+	var storeFilename = strings.Replace(filesMap["actions"].Name(), "actions", "index", 1)
+
+	pathSlice := strings.Split(storeFilename, "/")
+	storeName := pathSlice[len(pathSlice)-2]
+
+	err = createEntryPoint("./templates/store-index.tmpl", storeFilename, map[string]string{
+		"storeName":          storeName,
+		"storeNameTitleCase": cases.Title(language.English).String(storeName),
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func createEntryPoint(templatePath string, outputPath string, values map[string]string) error {
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	tmp, err := template.ParseFiles(templatePath)
+	if err != nil {
+		return err
+	}
+
+	var buf bytes.Buffer
+	if err := tmp.Execute(&buf, values); err != nil {
+		return err
+	}
+
+	err = os.WriteFile(outputPath, buf.Bytes(), 0644)
+	if err != nil {
+		return errors.New("error wrinting file -> " + err.Error())
+	}
+
+	return nil
 }
