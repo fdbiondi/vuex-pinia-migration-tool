@@ -9,9 +9,9 @@ import (
 )
 
 var mutPattern = map[string]*regexp.Regexp{
-	string("object"):       regexp.MustCompile(`mutations\s=\s\{$|export\sdefault\s\{$`),
+	string("object"):       regexp.MustCompile(`(mutations(:\s\w+)?\s=\s\{)|(export\sdefault\s\{)`),
 	string("function"):     regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`),
-	string("function_end"): regexp.MustCompile(`\s\s\},?`),
+	string("function_end"): regexp.MustCompile(`(?m)^\s\s\},?$`),
 	string("state_prop"):   regexp.MustCompile(`(state\.)(\w+)`),
 }
 
