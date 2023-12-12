@@ -23,7 +23,7 @@ func parseGetters(filesMap map[string]*os.File) []string {
 		return []string{}
 	}
 
-	fmt.Printf("parsing: %s\n\n", file.Name())
+	fmt.Printf("parsing: %s\n", file.Name())
 	scanner := bufio.NewScanner(file)
 
 	var lines []string

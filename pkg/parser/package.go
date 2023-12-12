@@ -19,6 +19,7 @@ var checkMem = false
 
 func Execute(destDir string) error {
 	filesInModule := []string{}
+	filesInDir := []string{}
 	currentPath := ""
 
 	if checkMem {
@@ -35,25 +36,42 @@ func Execute(destDir string) error {
 			return nil
 		}
 
-		if !strings.Contains(path, currentPath) {
-			// pass current files inside a module to translation function
-			fmt.Println("------------------------")
-			translate(filesInModule)
-
-			fmt.Println("------------------------")
-			fmt.Println()
-
-			// clean current module files
-			filesInModule = []string{}
-		}
-
+		// TODO: only works for directories for now
 		if info.IsDir() {
 			currentPath = path
 			return nil
 		}
 
+		// save all file names to check later the last file in dir
+		if len(filesInDir) == 0 {
+			entries, _ := os.ReadDir(currentPath)
+			for _, e := range entries {
+				filesInDir = append(filesInDir, e.Name())
+			}
+		}
+
 		// add files to current module
 		filesInModule = append(filesInModule, path)
+
+		// checking last file inside the directory
+		if filesInDir[len(filesInDir)-1] == info.Name() {
+			// pass current files inside a module to translation function
+			tag := fmt.Sprintf("--------------------%s--------------------", strings.Split(path, "/")[len(strings.Split(path, "/"))-2])
+
+			fmt.Println(tag)
+			translate(filesInModule)
+
+			for range tag {
+				fmt.Printf("-")
+			}
+			fmt.Println()
+			fmt.Println()
+
+			// clean current module files
+			filesInModule = []string{}
+			// clean files in dir
+			filesInDir = []string{}
+		}
 
 		return nil
 	})
@@ -117,33 +135,27 @@ func translate(files []string) {
 
 	// get actions file to write lines
 	file, ok := filesMap["actions"]
-	if !ok {
-		log.Fatal("actions file not found")
-	}
-
-	// write actions into output file
-	err := os.WriteFile(file.Name(), []byte(strings.Join(actionsLines, "\n")), 0644)
-	if err != nil {
-		log.Fatal(err)
+	if ok {
+		// write actions into output file
+		err := os.WriteFile(file.Name(), []byte(strings.Join(actionsLines, "\n")), 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	// get getters file to write lines
 	file, ok = filesMap["getters"]
-	if !ok {
-		log.Fatal("getters file not found")
-	}
+	if ok {
+		// write getters into output file
+		err := os.WriteFile(file.Name(), []byte(strings.Join(gettersLines, "\n")), 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	// write getters into output file
-	err = os.WriteFile(file.Name(), []byte(strings.Join(gettersLines, "\n")), 0644)
-	if err != nil {
-		log.Fatal(err)
 	}
 
 	// remove mutations file
-	err = os.Remove(filesMap["mutations"].Name())
-	if err != nil {
-		log.Fatal(err)
-	}
+	err := os.Remove(filesMap["mutations"].Name())
 
 	// create module entrypoint
 	var storeFilename = strings.Replace(filesMap["actions"].Name(), "actions", "index", 1)
@@ -158,7 +170,6 @@ func translate(files []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 func createEntryPoint(templatePath string, outputPath string, values map[string]string) error {
