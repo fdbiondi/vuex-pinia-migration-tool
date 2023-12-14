@@ -72,7 +72,7 @@ func parseActions(filesMap map[string]*os.File) []string {
 			multiLineFnCall = append(multiLineFnCall, strings.TrimSpace(line))
 
 			if actionPattern["commit_dispatch_lines_end"].FindStringSubmatch(line) != nil {
-				line = fmt.Sprintf("    %s", strings.Join(multiLineFnCall, ""))
+				line = fmt.Sprintf("      %s", strings.Join(multiLineFnCall, ""))
 
 				multiLineFnCall = []string{}
 			} else {
@@ -89,6 +89,7 @@ func parseActions(filesMap map[string]*os.File) []string {
 				storeName := fmt.Sprint(fn[0], "Store")
 				fnName := fn[1]
 				args := strings.Replace(match[3], ", { root: true }", "", 1)
+				args = strings.Replace(args, ",{ root: true }", "", 1)
 
 				line = actionPattern["commit_dispatch"].ReplaceAllString(line, fmt.Sprintf("%s.%s(%s)", storeName, fnName, args))
 
@@ -100,7 +101,7 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 				if !slices.Contains(importedStores, storeName) {
 					// create import statement of store
-					importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", fn[0], ".ts"))
+					importLine := fmt.Sprintf("import { %s } from '%s'", storeFn, fmt.Sprint("~/stores/", fn[0]))
 
 					// add import statement to first line
 					lines = append([]string{importLine}, lines...)

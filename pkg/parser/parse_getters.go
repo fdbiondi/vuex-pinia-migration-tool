@@ -15,6 +15,7 @@ var getterPattern = map[string]*regexp.Regexp{
 	string("getter_call"):        regexp.MustCompile(`getters\.(\w*)`),
 	string("root_state_call"):    regexp.MustCompile(`rootState\.(\w*)\.(\w*)`),
 	string("root_getter_call"):   regexp.MustCompile(`rootGetters\[("|')((\w+)\/(\w+))("|')\]`),
+	string("not_used_params"):    regexp.MustCompile(`(\w+)\((_(\w+)?)(,.*)\) \{`),
 }
 
 func parseGetters(filesMap map[string]*os.File) []string {
@@ -73,7 +74,7 @@ func parseGetters(filesMap map[string]*os.File) []string {
 			if !slices.Contains(importedStores, storeName) {
 				// create import statement of store
 				storeFilename := fmt.Sprintf("%s-%s", match[1], match[2])
-				importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", storeFilename, ".ts"))
+				importLine := fmt.Sprintf("import { %s } from '%s'", storeFn, fmt.Sprint("~/stores/", storeFilename))
 
 				// add import statement to first line
 				lines = append([]string{importLine}, lines...)
@@ -86,7 +87,6 @@ func parseGetters(filesMap map[string]*os.File) []string {
 			storeFn := fmt.Sprintf("use%sStore", capitalizeByteSlice(match[3]))
 			storeName := fmt.Sprint(match[3], "Store")
 			fnName := match[4]
-			// args := strings.Replace(match[3], ", { root: true }", "", 1)
 
 			line = getterPattern["root_getter_call"].ReplaceAllString(line, fmt.Sprintf("%s.%s", storeName, fnName))
 
@@ -101,12 +101,16 @@ func parseGetters(filesMap map[string]*os.File) []string {
 
 			if !slices.Contains(importedStores, storeName) {
 				// create import statement of store
-				importLine := fmt.Sprintf("import %s from '%s'", storeFn, fmt.Sprint("~/store/", storeName, ".ts"))
+				importLine := fmt.Sprintf("import { %s } from '%s'", storeFn, fmt.Sprint("~/stores/", storeName))
 
 				// add import statement to first line
 				lines = append([]string{importLine}, lines...)
 				importedStores = append(importedStores, storeName)
 			}
+		}
+
+		if match := getterPattern["not_used_params"].FindStringSubmatch(line); match != nil {
+			line = getterPattern["not_used_params"].ReplaceAllString(line, "$1() {")
 		}
 
 		if match := getterPattern["function_lines_end"].FindStringSubmatch(line); match != nil {
