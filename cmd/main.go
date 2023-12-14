@@ -14,11 +14,12 @@ var (
 	verbose    bool
 	debug      bool
 	removeDest bool
-	rootCmd    = &cobra.Command{
-		Use:   "vuex-2-pinia",
-		Short: "A migration tool for vuex code base to pinia state management format",
-	}
 )
+
+var rootCmd = &cobra.Command{
+	Use:   "vuex-2-pinia",
+	Short: "A migration tool for vuex code base to pinia state management format",
+}
 
 func main() {
 
