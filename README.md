@@ -20,23 +20,28 @@ make install
 src
 └── store
 	├── module1
-	|		├── actions.ts
-	|		├── getters.ts
-	|		├── mutations.ts
-	|		└── state.ts
+		├── actions.ts
+		├── getters.ts
+		├── mutations.ts
+		└── state.ts
 	└── module2
-			├── actions.ts
-			├── getters.ts
-			├── mutations.ts
-			└── state.ts
+		├── actions.ts
+		├── getters.ts
+		├── mutations.ts
+		└── state.ts
 ```
 
 
 ## Usage
 
 ```bash
-	$ vuex-to-pinia migrate <from> <to>
-	$ vuex-to-pinia <options>
+vuex-to-pinia <options>
+```
+
+> Migrate vuex code to pinia code
+
+```bash
+vuex-to-pinia migrate <from> <to>
 ```
 
 ## Contributing
@@ -48,10 +53,10 @@ check [open issues](https://github.com/fdbiondi/vuex-pinia-migration-tool/issues
 ## Quick Start
 
 ```bash
-	git clone https://github.com/fdbiondi/vuex-pinia-migration-tool.git
-	cd vuex-pinia-migration-tool
-	go get -d ./...
-	go run cmd/main.go
+git clone https://github.com/fdbiondi/vuex-pinia-migration-tool.git
+cd vuex-pinia-migration-tool
+go get -d ./...
+go run cmd/main.go
 ```
 
 ## License
