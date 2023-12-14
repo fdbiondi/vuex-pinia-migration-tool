@@ -15,20 +15,25 @@ import (
 	"golang.org/x/text/language"
 )
 
-var checkMem = false
+var (
+	Debug   = false
+	Verbose = false
+)
 
 func Execute(destDir string) error {
 	filesInModule := []string{}
 	filesInDir := []string{}
 	currentPath := ""
 
-	if checkMem {
+	if Debug {
 		PrintMemUsage()
 	}
 
 	err := filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			fmt.Println("Err: ", err)
+			if Verbose {
+				fmt.Println("Err: ", err)
+			}
 			return err
 		}
 
@@ -58,14 +63,19 @@ func Execute(destDir string) error {
 			// pass current files inside a module to translation function
 			tag := fmt.Sprintf("--------------------%s--------------------", strings.Split(path, "/")[len(strings.Split(path, "/"))-2])
 
-			fmt.Println(tag)
+			if Verbose {
+				fmt.Println(tag)
+			}
 			translate(filesInModule)
 
-			for range tag {
-				fmt.Printf("-")
+			if Verbose {
+				for range tag {
+					fmt.Printf("-")
+				}
+
+				fmt.Println()
+				fmt.Println()
 			}
-			fmt.Println()
-			fmt.Println()
 
 			// clean current module files
 			filesInModule = []string{}
@@ -76,11 +86,11 @@ func Execute(destDir string) error {
 		return nil
 	})
 
-	if err != nil {
+	if err != nil && Verbose {
 		fmt.Println("Err: ", err)
 	}
 
-	if checkMem {
+	if Debug {
 		PrintMemUsage()
 	}
 
