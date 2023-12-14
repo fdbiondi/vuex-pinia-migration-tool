@@ -17,14 +17,14 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "vuex-2-pinia",
+	Use:   "vuex-to-pinia",
 	Short: "A migration tool for vuex code base to pinia state management format",
 }
 
 func main() {
 
 	migrateCmd := &cobra.Command{
-		Use:   "migrate [SOURCE PATH] [DEST PATH]",
+		Use:   "migrate [source_path] [destination_path]",
 		Short: "Translates code from a source directory written in vuex to a destiny directory",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
