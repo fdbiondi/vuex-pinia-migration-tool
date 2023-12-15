@@ -25,7 +25,7 @@ func main() {
 
 	migrateCmd := &cobra.Command{
 		Use:   "migrate [source_path] [destination_path]",
-		Short: "Translates code from a source directory written in vuex to a destiny directory",
+		Short: "Translates code from a source directory written in vuex to an output directory",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			// set flags
@@ -89,7 +89,7 @@ func main() {
 	}
 
 	migrateCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-	migrateCmd.PersistentFlags().BoolVarP(&removeDest, "remove-dest", "r", false, "remove destiny directory")
+	migrateCmd.PersistentFlags().BoolVarP(&removeDest, "remove-destination", "r", false, "remove destination directory")
 	migrateCmd.PersistentFlags().BoolVarP(&debug, "debug-mode", "d", false, "enable debug mode")
 
 	var versionCmd = &cobra.Command{
