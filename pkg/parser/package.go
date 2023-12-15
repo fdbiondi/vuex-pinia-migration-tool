@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -27,6 +28,8 @@ var (
 func Execute(destDir string) error {
 	filesInModule := []string{}
 	filesInDir := []string{}
+	filesInSubModules := map[string][]string{}
+	subModules := []string{}
 	currentPath := ""
 
 	if Debug {
@@ -52,11 +55,31 @@ func Execute(destDir string) error {
 		}
 
 		// save all file names to check later the last file in dir
-		if len(filesInDir) == 0 {
+		if len(append(filesInDir, subModules...)) == 0 {
 			entries, _ := os.ReadDir(currentPath)
 			for _, e := range entries {
-				filesInDir = append(filesInDir, e.Name())
+
+				fileInfo, err := os.Stat(strings.Join([]string{currentPath, e.Name()}, "/"))
+				if err != nil {
+					// TODO skips files with errors for now
+					continue
+				}
+
+				if fileInfo.IsDir() {
+					subModules = append(subModules, e.Name())
+				} else {
+					filesInDir = append(filesInDir, e.Name())
+				}
 			}
+		}
+
+		currModule := regexp.MustCompile(`(.*)\/(.*)\/(.*)$`).ReplaceAllString(path, "$2")
+		// modulePath := regexp.MustCompile(`(.*)\/(.*)$`).ReplaceAllString(path, "$1")
+
+		if slices.Contains(subModules, currModule) {
+			filesInSubModules[currModule] = append(filesInSubModules[currModule], path)
+
+			return nil
 		}
 
 		// add files to current module
@@ -64,22 +87,10 @@ func Execute(destDir string) error {
 
 		// checking last file inside the directory
 		if filesInDir[len(filesInDir)-1] == info.Name() {
-			// pass current files inside a module to translation function
-			tag := fmt.Sprintf("--------------------%s--------------------", strings.Split(path, "/")[len(strings.Split(path, "/"))-2])
 
-			if Verbose {
-				fmt.Println(tag)
-			}
-			translate(filesInModule)
-
-			if Verbose {
-				for range tag {
-					fmt.Printf("-")
-				}
-
-				fmt.Println()
-				fmt.Println()
-			}
+			printOutput(path, func() {
+				translate(filesInModule)
+			})
 
 			// clean current module files
 			filesInModule = []string{}
@@ -99,6 +110,25 @@ func Execute(destDir string) error {
 	}
 
 	return err
+}
+
+func printOutput(path string, fn func()) {
+	tag := fmt.Sprintf("--------------------%s--------------------", strings.Split(path, "/")[len(strings.Split(path, "/"))-2])
+
+	if Verbose {
+		fmt.Println(tag)
+	}
+
+	fn()
+
+	if Verbose {
+		for range tag {
+			fmt.Printf("-")
+		}
+
+		fmt.Println()
+		fmt.Println()
+	}
 }
 
 const CLOSE_FUNCTION_CURLY_BRACE = "  },"
@@ -198,6 +228,7 @@ func translate(files []string) {
 
 func createEntryPoint(filesMap map[string]*os.File) (string, error) {
 	key := getFirstKey(filesMap)
+
 	var storeFilename = strings.Replace(filesMap[key].Name(), key, "index", 1)
 
 	pathSlice := strings.Split(storeFilename, "/")
