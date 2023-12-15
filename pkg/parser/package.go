@@ -178,7 +178,10 @@ func translate(files []string) {
 	}
 
 	// create module entrypoint
-	var storeFilename = strings.Replace(filesMap["actions"].Name(), "actions", "index", 1)
+	key := getFirstKey(filesMap)
+	var storeFilename = strings.Replace(filesMap[key].Name(), key, "index", 1)
+
+	fmt.Println("storeFilename: ", storeFilename, "key: ", key)
 
 	pathSlice := strings.Split(storeFilename, "/")
 	storeName := pathSlice[len(pathSlice)-2]
@@ -219,4 +222,12 @@ func parseTemplate(templateStr string, outputPath string, values map[string]stri
 	}
 
 	return nil
+}
+
+func getFirstKey[K comparable, V any](m map[K]V) K {
+	for k := range m {
+		return k
+	}
+
+	return *new(K)
 }
