@@ -41,7 +41,6 @@ func Execute(destDir string) error {
 			return err
 		}
 
-		fmt.Println("Path: ", path)
 		if destDir == path {
 			return nil
 		}
@@ -194,7 +193,7 @@ func translate(files []string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Created %s\n", storeName)
+	fmt.Printf("Created %s store\n", storeName)
 }
 
 func createEntryPoint(filesMap map[string]*os.File) (string, error) {
