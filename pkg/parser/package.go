@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"embed"
 	"errors"
 	"fmt"
 	"log"
@@ -14,6 +15,9 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+//go:embed templates/index.tmpl
+var indexTmpl embed.FS
 
 var (
 	Debug   = false
@@ -173,29 +177,33 @@ func translate(files []string) {
 	pathSlice := strings.Split(storeFilename, "/")
 	storeName := pathSlice[len(pathSlice)-2]
 
-	err = createEntryPoint("./templates/store-index.tmpl", storeFilename, map[string]string{
+	data, err := indexTmpl.ReadFile("templates/index.tmpl")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var values = map[string]string{
 		"storeName":          storeName,
 		"storeNameTitleCase": cases.Title(language.English).String(storeName),
-	})
+	}
+
+	err = parseTemplate(string(data), storeFilename, values)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func createEntryPoint(templatePath string, outputPath string, values map[string]string) error {
+func parseTemplate(templateStr string, outputPath string, values map[string]string) error {
 	file, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	tmp, err := template.ParseFiles(templatePath)
-	if err != nil {
-		return err
-	}
+	tmpl := template.Must(template.New("template").Parse(templateStr))
 
 	var buf bytes.Buffer
-	if err := tmp.Execute(&buf, values); err != nil {
+	if err := tmpl.Execute(&buf, values); err != nil {
 		return err
 	}
 
