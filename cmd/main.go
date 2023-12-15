@@ -81,7 +81,7 @@ func main() {
 			if err != nil {
 				return err
 			} else {
-				fmt.Println("migrated!")
+				fmt.Println("\nmigration complete!")
 			}
 
 			return nil

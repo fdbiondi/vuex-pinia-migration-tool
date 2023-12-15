@@ -41,6 +41,7 @@ func Execute(destDir string) error {
 			return err
 		}
 
+		fmt.Println("Path: ", path)
 		if destDir == path {
 			return nil
 		}
@@ -124,6 +125,7 @@ func translate(files []string) {
 	var actionsLines = parseActions(filesMap)
 	var gettersLines = parseGetters(filesMap)
 	var addedComma = false
+	var migrated = false
 
 	// append mutations into actions file
 	for index := len(actionsLines) - 1; index >= 0; index-- {
@@ -155,6 +157,8 @@ func translate(files []string) {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		migrated = true
 	}
 
 	// get getters file to write lines
@@ -166,6 +170,7 @@ func translate(files []string) {
 			log.Fatal(err)
 		}
 
+		migrated = true
 	}
 
 	// remove mutations file
@@ -175,20 +180,33 @@ func translate(files []string) {
 		if err != nil {
 			log.Fatal(err)
 		}
+
+		migrated = true
+	}
+
+	if !migrated {
+		return
 	}
 
 	// create module entrypoint
+	storeName, err := createEntryPoint(filesMap)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Created %s\n", storeName)
+}
+
+func createEntryPoint(filesMap map[string]*os.File) (string, error) {
 	key := getFirstKey(filesMap)
 	var storeFilename = strings.Replace(filesMap[key].Name(), key, "index", 1)
-
-	fmt.Println("storeFilename: ", storeFilename, "key: ", key)
 
 	pathSlice := strings.Split(storeFilename, "/")
 	storeName := pathSlice[len(pathSlice)-2]
 
 	data, err := indexTmpl.ReadFile("templates/index.tmpl")
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	var values = map[string]string{
@@ -198,8 +216,10 @@ func translate(files []string) {
 
 	err = parseTemplate(string(data), storeFilename, values)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
+
+	return storeName, nil
 }
 
 func parseTemplate(templateStr string, outputPath string, values map[string]string) error {
