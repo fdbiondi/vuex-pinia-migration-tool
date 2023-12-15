@@ -169,7 +169,13 @@ func translate(files []string) {
 	}
 
 	// remove mutations file
-	err := os.Remove(filesMap["mutations"].Name())
+	file, ok = filesMap["mutations"]
+	if ok {
+		err := os.Remove(file.Name())
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	// create module entrypoint
 	var storeFilename = strings.Replace(filesMap["actions"].Name(), "actions", "index", 1)
