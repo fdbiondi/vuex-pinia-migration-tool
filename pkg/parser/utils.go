@@ -9,6 +9,9 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func capitalizeByteSlice(str string) string {
@@ -36,6 +39,25 @@ func bToMb(b uint64) uint64 {
 	return b / 1024 / 1024
 }
 
+func printOutput(path string, fn func()) {
+	tag := fmt.Sprintf("--------------------%s--------------------", strings.Split(path, "/")[len(strings.Split(path, "/"))-2])
+
+	if Verbose {
+		fmt.Println(tag)
+	}
+
+	fn()
+
+	if Verbose {
+		for range tag {
+			fmt.Printf("-")
+		}
+
+		fmt.Println()
+		fmt.Println()
+	}
+}
+
 func removeExtension(path string) string {
 	return strings.Split(path, ".")[0]
 }
@@ -56,7 +78,7 @@ func insertLine(array []string, index int, value string) []string {
 //go:embed templates/index.tmpl
 var indexTmpl embed.FS
 
-func createEntryPoint(filesMap map[string]*os.File) (string, error) {
+func createIndex(filesMap map[string]*os.File) (string, error) {
 	key := getFirstKey(filesMap)
 
 	var storeFilename = strings.Replace(filesMap[key].Name(), key, "index", 1)

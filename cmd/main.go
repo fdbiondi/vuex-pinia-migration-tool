@@ -77,7 +77,8 @@ func main() {
 				fmt.Printf("output path '%s'\n\n", destDir)
 			}
 
-			err = parser.Execute(destDir)
+			mod := parser.NewModule(destDir)
+			err = mod.Parse()
 			if err != nil {
 				return err
 			} else {

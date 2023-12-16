@@ -15,81 +15,43 @@ var (
 	Verbose = false
 )
 
-func Execute(destDir string) error {
-	filesInModule := []string{}
-	filesInDir := []string{}
-	filesInSubModules := map[string][]string{}
-	subModules := []string{}
-	currentPath := ""
+type Module struct {
+	files      []string
+	dirList    []string
+	subModules map[string]string
+	path       string
+	outputDir  string
+	parentName string
+}
 
+var (
+	subModules = []string{}
+)
+
+func NewModule(outputDir string) Module {
+	return Module{
+		outputDir:  outputDir,
+		parentName: "",
+		subModules: make(map[string]string),
+		path:       "",
+	}
+}
+
+func NewSubModule(outputDir string, parentName string) Module {
+	return Module{
+		outputDir:  outputDir,
+		parentName: parentName,
+		subModules: make(map[string]string),
+		path:       "",
+	}
+}
+
+func (m *Module) Parse() error {
 	if Debug {
 		PrintMemUsage()
 	}
 
-	err := filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			if Verbose {
-				fmt.Println("Err: ", err)
-			}
-			return err
-		}
-
-		if destDir == path {
-			return nil
-		}
-
-		// TODO: only works for directories for now
-		if info.IsDir() {
-			currentPath = path
-			return nil
-		}
-
-		// save all file names to check later the last file in dir
-		if len(append(filesInDir, subModules...)) == 0 {
-			entries, _ := os.ReadDir(currentPath)
-			for _, e := range entries {
-
-				fileInfo, err := os.Stat(strings.Join([]string{currentPath, e.Name()}, "/"))
-				if err != nil {
-					// TODO skips files with errors for now
-					continue
-				}
-
-				if fileInfo.IsDir() {
-					subModules = append(subModules, e.Name())
-				} else {
-					filesInDir = append(filesInDir, e.Name())
-				}
-			}
-		}
-
-		currModule := regexp.MustCompile(`(.*)\/(.*)\/(.*)$`).ReplaceAllString(path, "$2")
-		// modulePath := regexp.MustCompile(`(.*)\/(.*)$`).ReplaceAllString(path, "$1")
-
-		if slices.Contains(subModules, currModule) {
-			filesInSubModules[currModule] = append(filesInSubModules[currModule], path)
-
-			return nil
-		}
-
-		// add files to current module
-		filesInModule = append(filesInModule, path)
-
-		// checking last file inside the directory
-		if filesInDir[len(filesInDir)-1] == info.Name() {
-
-			printOutput(path, func() {
-				translate(filesInModule)
-			})
-
-			// clean current module files
-			filesInModule = []string{}
-			// clean files in dir
-			filesInDir = []string{}
-		}
-
-		return nil
-	})
+	err := filepath.Walk(m.outputDir, m.walk)
 
 	if err != nil && Verbose {
 		fmt.Println("Err: ", err)
@@ -102,34 +64,108 @@ func Execute(destDir string) error {
 	return err
 }
 
-func printOutput(path string, fn func()) {
-	tag := fmt.Sprintf("--------------------%s--------------------", strings.Split(path, "/")[len(strings.Split(path, "/"))-2])
-
-	if Verbose {
-		fmt.Println(tag)
+func (m *Module) walk(path string, info os.FileInfo, err error) error {
+	if err != nil {
+		if Verbose {
+			fmt.Println("Err: ", err)
+		}
+		return err
 	}
 
-	fn()
+	if m.outputDir == path {
+		return nil
+	}
 
-	if Verbose {
-		for range tag {
-			fmt.Printf("-")
+	// TODO: only works for directories for now
+	if info.IsDir() {
+		m.path = path
+		return nil
+	} else if m.path == "" {
+		m.path = regexp.MustCompile(`(.*)\/(.*)$`).ReplaceAllString(path, "$1")
+	}
+
+	// save all file names to check later the last file in dir
+	if len(append(m.dirList, subModules...)) == 0 {
+		entries, _ := os.ReadDir(m.path)
+		for _, e := range entries {
+
+			fileInfo, err := os.Stat(strings.Join([]string{m.path, e.Name()}, "/"))
+			if err != nil {
+				// TODO skips files with errors for now
+				continue
+			}
+
+			if fileInfo.IsDir() {
+				subModules = append(subModules, e.Name())
+			} else {
+				m.dirList = append(m.dirList, e.Name())
+			}
+		}
+	}
+
+	modName := regexp.MustCompile(`(.*)\/(.*)\/(.*)$`).ReplaceAllString(path, "$2")
+
+	if slices.Contains(subModules, modName) {
+		_, ok := m.subModules[modName]
+		if !ok {
+			m.subModules[modName] = regexp.MustCompile(`(.*)\/(.*)$`).ReplaceAllString(path, "$1")
 		}
 
-		fmt.Println()
-		fmt.Println()
+		return nil
 	}
+
+	// add files to current module
+	m.files = append(m.files, path)
+
+	// checking last file inside the directory
+	if m.dirList[len(m.dirList)-1] == info.Name() {
+
+		printOutput(path, func() {
+			m.translate()
+
+			if m.parentName == "" {
+				fmt.Printf("Created %s store\n", modName)
+			} else {
+				fmt.Printf("Created %s store\n", strings.Join([]string{m.parentName, modName}, "/"))
+			}
+		})
+
+		// clean current module files
+		m.files = []string{}
+		// clean files in dir
+		m.dirList = []string{}
+		// clean sub modules
+		subModules = []string{}
+
+		for _, subModPath := range m.subModules {
+			var parentName string
+
+			if m.parentName == "" {
+				parentName = strings.Join([]string{modName}, "/")
+			} else {
+				parentName = strings.Join([]string{m.parentName, modName}, "/")
+			}
+
+			var subModule = NewSubModule(subModPath, parentName)
+
+			subModule.Parse()
+		}
+
+		m.subModules = make(map[string]string)
+	}
+
+	return nil
 }
 
 const CLOSE_FUNCTION_CURLY_BRACE = "  },"
 
 const CLOSE_ACTIONS_PATTERN = `^\};$`
 
-func translate(files []string) {
+func (m *Module) translate() {
 	filesMap := make(map[string]*os.File) // will have actions, mutations, state, getters keys
 
 	// open and save files to the map
-	for _, originFilepath := range files {
+	for _, originFilepath := range m.files {
 		file, err := os.Open(originFilepath)
 		if err != nil {
 			log.Fatal(err)
@@ -208,10 +244,8 @@ func translate(files []string) {
 	}
 
 	// create module entrypoint
-	storeName, err := createEntryPoint(filesMap)
+	_, err := createIndex(filesMap)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	fmt.Printf("Created %s store\n", storeName)
 }
