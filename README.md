@@ -19,16 +19,21 @@ make install
 # Required Vuex directory structure
 src
 └── store
-	├── module1
-		├── actions.ts
-		├── getters.ts
-		├── mutations.ts
-		└── state.ts
-	└── module2
-		├── actions.ts
-		├── getters.ts
-		├── mutations.ts
-		└── state.ts
+    └── module1
+        ├── actions.ts
+        ├── getters.ts
+        ├── mutations.ts
+        ├── state.ts
+        └── subModule
+            ├── actions.ts
+            ├── getters.ts
+            ├── mutations.ts
+            └── state.ts
+    └── module2
+        ├── actions.ts
+        ├── getters.ts
+        ├── mutations.ts
+        └── state.ts
 ```
 
 
