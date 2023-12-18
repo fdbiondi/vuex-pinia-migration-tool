@@ -18,6 +18,7 @@ var actionPattern = map[string]*regexp.Regexp{
 	string("commit_dispatch_lines_end"): regexp.MustCompile(`.*\);$`),
 	string("function_lines"):            regexp.MustCompile(`^\s{2}(async\s)?(\w)+\($`),
 	string("function_lines_end"):        regexp.MustCompile(`\s{2}\)\s{$`),
+	string("getter_call"):               regexp.MustCompile(`(.*)getters(\.\w+.*)`),
 }
 
 func parseActions(filesMap map[string]*os.File) []string {
@@ -64,6 +65,10 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 		if actionPattern["state_prop"].FindStringSubmatch(line) != nil {
 			line = actionPattern["state_prop"].ReplaceAllString(line, "this.$2")
+		}
+
+		if match := getterPattern["getter_call"].FindStringSubmatch(line); match != nil {
+			line = getterPattern["getter_call"].ReplaceAllString(line, "$1this$2")
 		}
 
 		if actionPattern["commit_dispatch_lines"].FindStringSubmatch(line) != nil && len(multiLineFnCall) == 0 {
