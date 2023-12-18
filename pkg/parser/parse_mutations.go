@@ -15,6 +15,7 @@ var mutPattern = map[string]*regexp.Regexp{
 	string("state_prop_1"): regexp.MustCompile(`(state\.)(\w+)`),
 	string("state_prop_2"): regexp.MustCompile(`(state(,|))`),
 	string("import"):       regexp.MustCompile(`^import.*$`),
+	string("import_store"): regexp.MustCompile(`~/store/`),
 }
 
 func parseMutations(filesMap map[string]*os.File) ([]string, []string) {
@@ -38,6 +39,10 @@ func parseMutations(filesMap map[string]*os.File) ([]string, []string) {
 		line := scanner.Text()
 
 		if mutPattern["import"].FindStringSubmatch(line) != nil {
+			if mutPattern["import_store"].FindStringSubmatch(line) != nil {
+				line = mutPattern["import_store"].ReplaceAllString(line, "~/stores/")
+			}
+
 			importLines = append(importLines, line)
 		}
 

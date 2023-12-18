@@ -19,6 +19,7 @@ var actionPattern = map[string]*regexp.Regexp{
 	string("function_lines"):            regexp.MustCompile(`^\s{2}(async\s)?(\w)+\($`),
 	string("function_lines_end"):        regexp.MustCompile(`\s{2}\)\s{$`),
 	string("getter_call"):               regexp.MustCompile(`(.*)getters(\.\w+.*)`),
+	string("import_store"):              regexp.MustCompile(`~/store/`),
 }
 
 func parseActions(filesMap map[string]*os.File) []string {
@@ -40,6 +41,13 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		if actionPattern["import_store"].FindStringSubmatch(line) != nil {
+			line = actionPattern["import_store"].ReplaceAllString(line, "~/stores/")
+
+			lines = append(lines, line)
+			continue
+		}
 
 		if actionPattern["function_lines"].FindStringSubmatch(line) != nil {
 			multiLineAction = append(multiLineAction, strings.TrimSpace(line))

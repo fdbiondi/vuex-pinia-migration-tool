@@ -16,6 +16,7 @@ var getterPattern = map[string]*regexp.Regexp{
 	string("root_state_call"):    regexp.MustCompile(`rootState\.(\w*)\.(\w*)`),
 	string("root_getter_call"):   regexp.MustCompile(`rootGetters\[("|')((\w+)\/(\w+))("|')\]`),
 	string("not_used_params"):    regexp.MustCompile(`(\w+)\((_(\w+)?)(,.*)\) \{`),
+	string("import_store"):       regexp.MustCompile(`~/store/`),
 }
 
 func parseGetters(filesMap map[string]*os.File) []string {
@@ -37,6 +38,13 @@ func parseGetters(filesMap map[string]*os.File) []string {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		if getterPattern["import_store"].FindStringSubmatch(line) != nil {
+			line = getterPattern["import_store"].ReplaceAllString(line, "~/stores/")
+
+			lines = append(lines, line)
+			continue
+		}
 
 		if match := getterPattern["function"].FindStringSubmatch(line); match != nil {
 			line = getterPattern["function"].ReplaceAllString(line, "$1($2)")
