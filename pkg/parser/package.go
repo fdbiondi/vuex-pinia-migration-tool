@@ -262,6 +262,7 @@ func appendLinesToObj(lines *[]string, linesToAppend *[]string) {
 
 func appendImports(lines *[]string, importLines *[]string) {
 	var replaceImportPattern = regexp.MustCompile(`^import\s((\w+)|\{(.*)\})\sfrom\s(('|").*('|"))(;|)$`)
+	var namedValuePattern = regexp.MustCompile(`(\w+)?(Mutation|mutation)(\w+)?(,|)`)
 
 	var replacedImports = []int{}
 	var lastImportIndex = 0
@@ -285,7 +286,7 @@ func appendImports(lines *[]string, importLines *[]string) {
 					// check same file imported and is not a default import
 					if importMatch[4] == match[4] && importMatch[2] == "" {
 						// remove mutations related import
-						importValue := regexp.MustCompile(`(\w+)?(Mutation|mutation)(\w+)?(,|)`).ReplaceAllString(importMatch[3], "")
+						importValue := namedValuePattern.ReplaceAllString(importMatch[3], "")
 						line := replaceImportPattern.ReplaceAllString(line, fmt.Sprintf("import {$3,%s} from $4$7", importValue))
 
 						(*lines)[index] = line
@@ -308,7 +309,11 @@ func appendImports(lines *[]string, importLines *[]string) {
 				continue
 			}
 
-			*lines = insertLine(*lines, lastImportIndex+lineIndex+1, line)
+			if namedValuePattern.FindStringSubmatch(line) != nil {
+				continue
+			}
+
+			*lines = insertLine(*lines, lastImportIndex+lineIndex, line)
 		}
 	}
 }

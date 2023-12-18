@@ -6,16 +6,19 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strings"
 )
 
 var mutPattern = map[string]*regexp.Regexp{
-	string("object"):       regexp.MustCompile(`(mutations(:\s\w+)?\s=\s\{)|(export\sdefault\s\{)`),
-	string("function"):     regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`),
-	string("function_end"): regexp.MustCompile(`(?m)^\s\s\},?$`),
-	string("state_prop_1"): regexp.MustCompile(`(state\.)(\w+)`),
-	string("state_prop_2"): regexp.MustCompile(`(state(,|))`),
-	string("import"):       regexp.MustCompile(`^import.*$`),
-	string("import_store"): regexp.MustCompile(`~/store/`),
+	string("object"):               regexp.MustCompile(`(mutations(:\s\w+)?\s=\s\{)|(export\sdefault\s\{)`),
+	string("function"):             regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`),
+	string("function_end"):         regexp.MustCompile(`(?m)^\s\s\},?$`),
+	string("state_prop_1"):         regexp.MustCompile(`(state\.)(\w+)`),
+	string("state_prop_2"):         regexp.MustCompile(`(state(,|))`),
+	string("import"):               regexp.MustCompile(`^import.*$`),
+	string("import_store"):         regexp.MustCompile(`~/store/`),
+	string("import_multiline"):     regexp.MustCompile(`^import\s\{$`),
+	string("import_multiline_end"): regexp.MustCompile(`^\}\sfrom\s.*(;|)$`),
 }
 
 func parseMutations(filesMap map[string]*os.File) ([]string, []string) {
@@ -31,12 +34,29 @@ func parseMutations(filesMap map[string]*os.File) ([]string, []string) {
 
 	var lines []string
 	var importLines []string
+	var multiLineImport = []string{}
 	var insideMutations = false
 	var index = -1
 	var isFn = false
 
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		if mutPattern["import_multiline"].FindStringSubmatch(line) != nil {
+			multiLineImport = append(multiLineImport, line)
+
+			continue
+		} else if len(multiLineImport) > 0 {
+			multiLineImport = append(multiLineImport, line)
+
+			if mutPattern["import_multiline_end"].FindStringSubmatch(line) != nil {
+				line = strings.Join(multiLineImport, "")
+
+				multiLineImport = []string{}
+			} else {
+				continue
+			}
+		}
 
 		if mutPattern["import"].FindStringSubmatch(line) != nil {
 			if mutPattern["import_store"].FindStringSubmatch(line) != nil {

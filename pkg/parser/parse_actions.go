@@ -20,6 +20,7 @@ var actionPattern = map[string]*regexp.Regexp{
 	string("function_lines_end"):        regexp.MustCompile(`\s{2}\)\s{$`),
 	string("getter_call"):               regexp.MustCompile(`getters\.(\w*)`),
 	string("import_store"):              regexp.MustCompile(`~/store/`),
+	string("line_comment"):              regexp.MustCompile(`(//.*)|(/\*.*\*\/)`),
 }
 
 func parseActions(filesMap map[string]*os.File) []string {
@@ -84,7 +85,8 @@ func parseActions(filesMap map[string]*os.File) []string {
 
 			continue
 		} else if len(multiLineFnCall) > 0 {
-			multiLineFnCall = append(multiLineFnCall, strings.TrimSpace(line))
+			line = strings.TrimSpace(actionPattern["line_comment"].ReplaceAllString(line, ""))
+			multiLineFnCall = append(multiLineFnCall, line)
 
 			if actionPattern["commit_dispatch_lines_end"].FindStringSubmatch(line) != nil {
 				line = fmt.Sprintf("      %s", strings.Join(multiLineFnCall, ""))
