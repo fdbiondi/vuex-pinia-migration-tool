@@ -158,14 +158,6 @@ func (m *Module) walk(path string, info os.FileInfo, err error) error {
 	return nil
 }
 
-const CLOSE_FUNCTION_CURLY_BRACE = "  },"
-
-const CLOSE_ACTIONS_PATTERN = `^\};$`
-
-const IMPORT_PATTERN = `^import.*$`
-
-var replaceImportPattern = regexp.MustCompile(`^import\s((\w+)|\{(.*)\})\sfrom\s(('|").*('|"))(;|)$`)
-
 func (m *Module) translate() {
 	filesMap := make(map[string]*os.File) // will have actions, mutations, state, getters keys
 
@@ -184,80 +176,10 @@ func (m *Module) translate() {
 	var mutationsLines, mutationsImportLines = parseMutations(filesMap)
 	var actionsLines = parseActions(filesMap)
 	var gettersLines = parseGetters(filesMap)
-	var addedComma = false
 	var migrated = false
 
-	// append mutations into actions file
-	if len(mutationsLines) > 0 {
-		for index := len(actionsLines) - 1; index >= 0; index-- {
-			// search latest line after close actions object
-			if regexp.MustCompile(CLOSE_ACTIONS_PATTERN).FindStringSubmatch(actionsLines[index]) != nil {
-
-				// this fixes the last action adding a comma at the end of it
-				if !addedComma {
-					actionsLines[index-1] = CLOSE_FUNCTION_CURLY_BRACE
-
-					addedComma = true
-				}
-
-				// insert mutations functions inside actions object
-				for lineIndex, line := range mutationsLines {
-					actionsLines = insertLine(actionsLines, index+(lineIndex*2+0), "")
-					actionsLines = insertLine(actionsLines, index+(lineIndex*2+1), line)
-				}
-
-				break
-			}
-		}
-	}
-
-	var replacedImports = []int{}
-	var lastImportIndex = 0
-
-	if len(mutationsImportLines) > 0 {
-		for index, actionLine := range actionsLines {
-
-			if actMatch := replaceImportPattern.FindStringSubmatch(actionLine); actMatch != nil {
-
-				for mutIndex, mutLine := range mutationsImportLines {
-
-					if slices.Contains(replacedImports, mutIndex) {
-						continue
-					}
-
-					if mutMatch := replaceImportPattern.FindStringSubmatch(mutLine); mutMatch != nil {
-
-						// check same file imported and is not a default import
-						if mutMatch[4] == actMatch[4] && mutMatch[2] == "" {
-							// remove mutations related import
-							importValue := regexp.MustCompile(`(\w+)?(Mutation|mutation)(\w+)?(,|)`).ReplaceAllString(mutMatch[3], "")
-
-							line := replaceImportPattern.ReplaceAllString(actionLine, fmt.Sprintf("import {$3,%s} from $4$7", importValue))
-
-							actionsLines[index] = line
-							replacedImports = append(replacedImports, mutIndex)
-						}
-					}
-				}
-
-				lastImportIndex = index
-			}
-
-			if len(replacedImports) == len(mutationsImportLines) {
-				break
-			}
-		}
-
-		if len(replacedImports) != len(mutationsImportLines) {
-			for lineIndex, line := range mutationsImportLines {
-				if slices.Contains(replacedImports, lineIndex) {
-					continue
-				}
-
-				actionsLines = insertLine(actionsLines, lastImportIndex+lineIndex+1, line)
-			}
-		}
-	}
+	appendLinesToObj(&actionsLines, &mutationsLines)
+	appendImports(&actionsLines, &mutationsImportLines)
 
 	// get actions file to write lines
 	file, ok := filesMap["actions"]
@@ -303,4 +225,87 @@ func (m *Module) translate() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func appendLinesToObj(lines *[]string, linesToAppend *[]string) {
+	const CLOSE_OBJ_LINE = `^\};$`
+	const CLOSE_FUNCTION_CURLY_BRACE = "  },"
+
+	var addedComma = false
+
+	if len(*linesToAppend) > 0 {
+		// start from the last line
+		for index := len(*lines) - 1; index >= 0; index-- {
+			// search latest line after close the object
+			if regexp.MustCompile(CLOSE_OBJ_LINE).FindStringSubmatch((*lines)[index]) != nil {
+
+				// this fixes the last line adding a comma at the end of it
+				if !addedComma {
+					(*lines)[index-1] = CLOSE_FUNCTION_CURLY_BRACE
+
+					addedComma = true
+				}
+
+				// insert lines inside object
+				for lineIndex, line := range *linesToAppend {
+					*lines = insertLine(*lines, index+(lineIndex*2+0), "")
+					*lines = insertLine(*lines, index+(lineIndex*2+1), line)
+				}
+
+				break
+			}
+		}
+	}
+}
+
+func appendImports(lines *[]string, importLines *[]string) {
+	var replaceImportPattern = regexp.MustCompile(`^import\s((\w+)|\{(.*)\})\sfrom\s(('|").*('|"))(;|)$`)
+
+	var replacedImports = []int{}
+	var lastImportIndex = 0
+
+	if len(*importLines) > 0 {
+		for index, line := range *lines {
+
+			if match := replaceImportPattern.FindStringSubmatch(line); match != nil {
+
+				for importIndex, importLine := range *importLines {
+
+					if slices.Contains(replacedImports, importIndex) {
+						continue
+					}
+
+					if importMatch := replaceImportPattern.FindStringSubmatch(importLine); importMatch != nil {
+
+						// check same file imported and is not a default import
+						if importMatch[4] == match[4] && importMatch[2] == "" {
+							// remove mutations related import
+							importValue := regexp.MustCompile(`(\w+)?(Mutation|mutation)(\w+)?(,|)`).ReplaceAllString(importMatch[3], "")
+							line := replaceImportPattern.ReplaceAllString(line, fmt.Sprintf("import {$3,%s} from $4$7", importValue))
+
+							(*lines)[index] = line
+							replacedImports = append(replacedImports, importIndex)
+						}
+					}
+				}
+
+				lastImportIndex = index
+			}
+
+			if len(replacedImports) == len(*importLines) {
+				break
+			}
+		}
+
+		if len(replacedImports) != len(*importLines) {
+			for lineIndex, line := range *importLines {
+				if slices.Contains(replacedImports, lineIndex) {
+					continue
+				}
+
+				*lines = insertLine(*lines, lastImportIndex+lineIndex+1, line)
+			}
+		}
+	}
+
 }
