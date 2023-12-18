@@ -13,12 +13,13 @@ var mutPattern = map[string]*regexp.Regexp{
 	string("function"):     regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`),
 	string("function_end"): regexp.MustCompile(`(?m)^\s\s\},?$`),
 	string("state_prop"):   regexp.MustCompile(`(state\.)(\w+)`),
+	string("import"):       regexp.MustCompile(`^import.*$`),
 }
 
-func parseMutations(filesMap map[string]*os.File) []string {
+func parseMutations(filesMap map[string]*os.File) ([]string, []string) {
 	file, ok := filesMap["mutations"]
 	if !ok {
-		return []string{}
+		return []string{}, []string{}
 	}
 
 	if Verbose {
@@ -27,12 +28,17 @@ func parseMutations(filesMap map[string]*os.File) []string {
 	scanner := bufio.NewScanner(file)
 
 	var lines []string
+	var importLines []string
 	var insideMutations = false
 	var index = -1
 	var isFn = false
 
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		if mutPattern["import"].FindStringSubmatch(line) != nil {
+			importLines = append(importLines, line)
+		}
 
 		if mutPattern["object"].FindStringSubmatch(line) != nil {
 			insideMutations = true
@@ -67,5 +73,5 @@ func parseMutations(filesMap map[string]*os.File) []string {
 		log.Fatal(err)
 	}
 
-	return lines
+	return lines, importLines
 }
