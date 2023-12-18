@@ -12,7 +12,8 @@ var mutPattern = map[string]*regexp.Regexp{
 	string("object"):       regexp.MustCompile(`(mutations(:\s\w+)?\s=\s\{)|(export\sdefault\s\{)`),
 	string("function"):     regexp.MustCompile(`\b(\w+)\((\{[\w\s\,]+\}|\w+)((,\s*(.*))\)|\))((\:\s.+)?\s{)$`),
 	string("function_end"): regexp.MustCompile(`(?m)^\s\s\},?$`),
-	string("state_prop"):   regexp.MustCompile(`(state\.)(\w+)`),
+	string("state_prop_1"): regexp.MustCompile(`(state\.)(\w+)`),
+	string("state_prop_2"): regexp.MustCompile(`(state(,|))`),
 	string("import"):       regexp.MustCompile(`^import.*$`),
 }
 
@@ -51,8 +52,10 @@ func parseMutations(filesMap map[string]*os.File) ([]string, []string) {
 				line = mutPattern["function"].ReplaceAllString(line, "$1($5)$6")
 			}
 
-			if mutPattern["state_prop"].FindStringSubmatch(line) != nil {
-				line = mutPattern["state_prop"].ReplaceAllString(line, "this.$2")
+			if mutPattern["state_prop_1"].FindStringSubmatch(line) != nil {
+				line = mutPattern["state_prop_1"].ReplaceAllString(line, "this.$2")
+			} else if mutPattern["state_prop_2"].FindStringSubmatch(line) != nil {
+				line = mutPattern["state_prop_2"].ReplaceAllString(line, "this$2")
 			}
 		}
 
