@@ -233,27 +233,29 @@ func appendLinesToObj(lines *[]string, linesToAppend *[]string) {
 
 	var addedComma = false
 
-	if len(*linesToAppend) > 0 {
-		// start from the last line
-		for index := len(*lines) - 1; index >= 0; index-- {
-			// search latest line after close the object
-			if regexp.MustCompile(CLOSE_OBJ_LINE).FindStringSubmatch((*lines)[index]) != nil {
+	if len(*linesToAppend) == 0 {
+		return
+	}
 
-				// this fixes the last line adding a comma at the end of it
-				if !addedComma {
-					(*lines)[index-1] = CLOSE_FUNCTION_CURLY_BRACE
+	// start from the last line
+	for index := len(*lines) - 1; index >= 0; index-- {
+		// search latest line after close the object
+		if regexp.MustCompile(CLOSE_OBJ_LINE).FindStringSubmatch((*lines)[index]) != nil {
 
-					addedComma = true
-				}
+			// this fixes the last line adding a comma at the end of it
+			if !addedComma {
+				(*lines)[index-1] = CLOSE_FUNCTION_CURLY_BRACE
 
-				// insert lines inside object
-				for lineIndex, line := range *linesToAppend {
-					*lines = insertLine(*lines, index+(lineIndex*2+0), "")
-					*lines = insertLine(*lines, index+(lineIndex*2+1), line)
-				}
-
-				break
+				addedComma = true
 			}
+
+			// insert lines inside object
+			for lineIndex, line := range *linesToAppend {
+				*lines = insertLine(*lines, index+(lineIndex*2+0), "")
+				*lines = insertLine(*lines, index+(lineIndex*2+1), line)
+			}
+
+			break
 		}
 	}
 }
@@ -264,48 +266,49 @@ func appendImports(lines *[]string, importLines *[]string) {
 	var replacedImports = []int{}
 	var lastImportIndex = 0
 
-	if len(*importLines) > 0 {
-		for index, line := range *lines {
+	if len(*importLines) == 0 || len(*lines) == 0 {
+		return
+	}
 
-			if match := replaceImportPattern.FindStringSubmatch(line); match != nil {
+	for index, line := range *lines {
 
-				for importIndex, importLine := range *importLines {
+		if match := replaceImportPattern.FindStringSubmatch(line); match != nil {
 
-					if slices.Contains(replacedImports, importIndex) {
-						continue
-					}
+			for importIndex, importLine := range *importLines {
 
-					if importMatch := replaceImportPattern.FindStringSubmatch(importLine); importMatch != nil {
-
-						// check same file imported and is not a default import
-						if importMatch[4] == match[4] && importMatch[2] == "" {
-							// remove mutations related import
-							importValue := regexp.MustCompile(`(\w+)?(Mutation|mutation)(\w+)?(,|)`).ReplaceAllString(importMatch[3], "")
-							line := replaceImportPattern.ReplaceAllString(line, fmt.Sprintf("import {$3,%s} from $4$7", importValue))
-
-							(*lines)[index] = line
-							replacedImports = append(replacedImports, importIndex)
-						}
-					}
-				}
-
-				lastImportIndex = index
-			}
-
-			if len(replacedImports) == len(*importLines) {
-				break
-			}
-		}
-
-		if len(replacedImports) != len(*importLines) {
-			for lineIndex, line := range *importLines {
-				if slices.Contains(replacedImports, lineIndex) {
+				if slices.Contains(replacedImports, importIndex) {
 					continue
 				}
 
-				*lines = insertLine(*lines, lastImportIndex+lineIndex+1, line)
+				if importMatch := replaceImportPattern.FindStringSubmatch(importLine); importMatch != nil {
+
+					// check same file imported and is not a default import
+					if importMatch[4] == match[4] && importMatch[2] == "" {
+						// remove mutations related import
+						importValue := regexp.MustCompile(`(\w+)?(Mutation|mutation)(\w+)?(,|)`).ReplaceAllString(importMatch[3], "")
+						line := replaceImportPattern.ReplaceAllString(line, fmt.Sprintf("import {$3,%s} from $4$7", importValue))
+
+						(*lines)[index] = line
+						replacedImports = append(replacedImports, importIndex)
+					}
+				}
 			}
+
+			lastImportIndex = index
+		}
+
+		if len(replacedImports) == len(*importLines) {
+			break
 		}
 	}
 
+	if len(replacedImports) != len(*importLines) {
+		for lineIndex, line := range *importLines {
+			if slices.Contains(replacedImports, lineIndex) {
+				continue
+			}
+
+			*lines = insertLine(*lines, lastImportIndex+lineIndex+1, line)
+		}
+	}
 }
