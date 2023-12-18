@@ -6,12 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"runtime"
 	"strings"
 	"text/template"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 func capitalizeByteSlice(str string) string {
@@ -21,6 +19,24 @@ func capitalizeByteSlice(str string) string {
 	}
 	bs[0] = byte(bs[0] - 32)
 	return string(bs)
+}
+
+func kebabToCamelCase(kebab string, firstToUpper ...bool) (camelCase string) {
+	isToUpper := len(firstToUpper) > 0 && reflect.TypeOf(firstToUpper[0]).Kind() == reflect.Bool && firstToUpper[0]
+
+	for _, runeValue := range kebab {
+		if isToUpper {
+			camelCase += strings.ToUpper(string(runeValue))
+			isToUpper = false
+		} else {
+			if runeValue == '-' {
+				isToUpper = true
+			} else {
+				camelCase += string(runeValue)
+			}
+		}
+	}
+	return
 }
 
 // PrintMemUsage outputs the current, total and OS memory being used. As well as the number of garage collection cycles completed.
@@ -93,7 +109,7 @@ func createIndex(filesMap map[string]*os.File) (string, error) {
 
 	var values = map[string]string{
 		"storeName":          storeName,
-		"storeNameTitleCase": cases.Title(language.English).String(storeName),
+		"storeNameTitleCase": kebabToCamelCase(storeName, true),
 	}
 
 	err = parseTemplate(string(data), storeFilename, values)
