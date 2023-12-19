@@ -78,11 +78,10 @@ func (m *Module) walk(path string, info os.FileInfo, err error) error {
 
 	// TODO: only works for directories for now
 	if info.IsDir() {
-		m.path = path
 		return nil
-	} else if m.path == "" {
-		m.path = regexp.MustCompile(`(.*)\/(.*)$`).ReplaceAllString(path, "$1")
 	}
+
+	m.path = regexp.MustCompile(`(.*)\/(.*)$`).ReplaceAllString(path, "$1")
 
 	// save all file names to check later the last file in dir
 	if len(append(m.dirList, subModules...)) == 0 {
