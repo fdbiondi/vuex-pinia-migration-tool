@@ -1,15 +1,10 @@
 package parser
 
 import (
-	"bytes"
-	"embed"
-	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"runtime"
 	"strings"
-	"text/template"
 )
 
 func capitalizeByteSlice(str string) string {
@@ -89,63 +84,4 @@ func insertLine(array []string, index int, value string) []string {
 	array = append(array[:index+1], array[index:]...)
 	array[index] = value
 	return array
-}
-
-//go:embed templates/index.tmpl
-var indexTmpl embed.FS
-
-func createIndex(filesMap map[string]*os.File) (string, error) {
-	key := getFirstKey(filesMap)
-
-	var storeFilename = strings.Replace(filesMap[key].Name(), key, "index", 1)
-
-	pathSlice := strings.Split(storeFilename, "/")
-	storeName := pathSlice[len(pathSlice)-2]
-
-	data, err := indexTmpl.ReadFile("templates/index.tmpl")
-	if err != nil {
-		return "", err
-	}
-
-	var values = map[string]string{
-		"storeName":          storeName,
-		"storeNameTitleCase": kebabToCamelCase(storeName, true),
-	}
-
-	err = parseTemplate(string(data), storeFilename, values)
-	if err != nil {
-		return "", err
-	}
-
-	return storeName, nil
-}
-
-func parseTemplate(templateStr string, outputPath string, values map[string]string) error {
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	tmpl := template.Must(template.New("template").Parse(templateStr))
-
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, values); err != nil {
-		return err
-	}
-
-	err = os.WriteFile(outputPath, buf.Bytes(), 0644)
-	if err != nil {
-		return errors.New("error wrinting file -> " + err.Error())
-	}
-
-	return nil
-}
-
-func getFirstKey[K comparable, V any](m map[K]V) K {
-	for k := range m {
-		return k
-	}
-
-	return *new(K)
 }

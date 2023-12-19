@@ -176,7 +176,7 @@ func (m *Module) translate() {
 	var mutationsLines, mutationsImportLines = parseMutations(filesMap)
 	var actionsLines = parseActions(filesMap)
 	var gettersLines = parseGetters(filesMap)
-	var migrated = false
+	var migrated = []string{}
 
 	appendLinesToObj(&actionsLines, &mutationsLines)
 	appendImports(&actionsLines, &mutationsImportLines)
@@ -190,7 +190,7 @@ func (m *Module) translate() {
 			log.Fatal(err)
 		}
 
-		migrated = true
+		migrated = append(migrated, "actions")
 	}
 
 	// get getters file to write lines
@@ -202,7 +202,7 @@ func (m *Module) translate() {
 			log.Fatal(err)
 		}
 
-		migrated = true
+		migrated = append(migrated, "getters")
 	}
 
 	// remove mutations file
@@ -213,15 +213,24 @@ func (m *Module) translate() {
 			log.Fatal(err)
 		}
 
-		migrated = true
+		migrated = append(migrated, "mutations")
 	}
 
-	if !migrated {
+	if len(migrated) == 0 {
 		return
 	}
 
+	var template = DEFAULT_TEMPLATE
+	if !slices.Contains(migrated, "actions") && !slices.Contains(migrated, "getters") && !slices.Contains(migrated, "mutations") {
+		template = STATE_ONLY_TEMPLATE
+	} else if !slices.Contains(migrated, "actions") && !slices.Contains(migrated, "mutations") {
+		template = NO_ACTIONS_TEMPLATE
+	} else if !slices.Contains(migrated, "getters") {
+		template = NO_GETTERS_TEMPLATE
+	}
+
 	// create module entrypoint
-	_, err := createIndex(filesMap)
+	_, err := createIndexTemplate(filesMap, template)
 	if err != nil {
 		log.Fatal(err)
 	}

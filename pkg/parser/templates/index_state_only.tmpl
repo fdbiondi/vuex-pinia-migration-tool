@@ -1,0 +1,7 @@
+import { defineStore } from 'pinia';
+
+import state from './state';
+
+export const use{{ .storeNameTitleCase }}Store = defineStore('{{ .storeName }}', {
+  state,
+});
