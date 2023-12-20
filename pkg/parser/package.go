@@ -120,12 +120,14 @@ func (m *Module) walk(path string, info os.FileInfo, err error) error {
 	if m.dirList[len(m.dirList)-1] == info.Name() {
 
 		printOutput(path, func() {
-			m.translate()
+			migrated := m.translate()
 
-			if m.parentName == "" {
-				fmt.Printf("Created %s store\n", modName)
-			} else {
-				fmt.Printf("Created %s store\n", strings.Join([]string{m.parentName, modName}, "/"))
+			if migrated {
+				if m.parentName == "" {
+					fmt.Printf("Created %s store\n", modName)
+				} else {
+					fmt.Printf("Created %s store\n", strings.Join([]string{m.parentName, modName}, "/"))
+				}
 			}
 		})
 
@@ -157,19 +159,27 @@ func (m *Module) walk(path string, info os.FileInfo, err error) error {
 	return nil
 }
 
-func (m *Module) translate() {
+func (m *Module) translate() bool {
 	filesMap := make(map[string]*os.File) // will have actions, mutations, state, getters keys
 
 	// open and save files to the map
 	for _, originFilepath := range m.files {
 		file, err := os.Open(originFilepath)
 		if err != nil {
-			log.Fatal(err)
+			continue
 		}
 		defer file.Close()
 
 		filename := removeExtension(getFilename(file.Name()))
 		filesMap[filename] = file
+	}
+
+	actionsPath, _ := checkActionsFile(filesMap)
+	if actionsPath != "" {
+		file, _ := os.Open(actionsPath)
+		filesMap["actions"] = file
+
+		defer file.Close()
 	}
 
 	var mutationsLines, mutationsImportLines = parseMutations(filesMap)
@@ -204,42 +214,68 @@ func (m *Module) translate() {
 		migrated = append(migrated, "getters")
 	}
 
-	// remove mutations file
 	file, ok = filesMap["mutations"]
 	if ok {
-		err := os.Remove(file.Name())
-		if err != nil {
-			log.Fatal(err)
+		// remove mutations file
+		os.Remove(file.Name())
+
+		for _, ext := range []string{".ts", ".js"} {
+			os.Remove(strings.Replace(file.Name(), ext, ".spec.ts", 1))
+			os.Remove(strings.Replace(file.Name(), ext, ".spec.js", 1))
 		}
 
 		migrated = append(migrated, "mutations")
 	}
 
 	if len(migrated) == 0 {
-		return
+		return false
 	}
 
-	var template = DEFAULT_TEMPLATE
+	// set template type for index file
+	var templateType = DEFAULT_TEMPLATE
 	if !slices.Contains(migrated, "actions") && !slices.Contains(migrated, "getters") && !slices.Contains(migrated, "mutations") {
-		template = STATE_ONLY_TEMPLATE
+		templateType = STATE_ONLY_TEMPLATE
 	} else if !slices.Contains(migrated, "actions") && !slices.Contains(migrated, "mutations") {
-		template = NO_ACTIONS_TEMPLATE
+		templateType = NO_ACTIONS_TEMPLATE
 	} else if !slices.Contains(migrated, "getters") {
-		template = NO_GETTERS_TEMPLATE
+		templateType = NO_GETTERS_TEMPLATE
 	}
 
 	// create module entrypoint
-	_, err := createIndexTemplate(filesMap, template)
-	if err != nil {
-		log.Fatal(err)
+	var templatePath = getTemplatePath(filesMap, "index")
+	var storeName = strings.Split(templatePath, "/")[len(strings.Split(templatePath, "/"))-2]
+	var values = map[string]string{
+		"storeName":          storeName,
+		"storeNameTitleCase": kebabToCamelCase(storeName, true),
 	}
+
+	err := createTemplate(templateType, templatePath, values)
+
+	return err == nil
+}
+
+func checkActionsFile(filesMap map[string]*os.File) (string, error) {
+	_, actionsFileOk := filesMap["actions"]
+	_, mutationsFileOk := filesMap["mutations"]
+	if !actionsFileOk && mutationsFileOk {
+		var templatePath = strings.Replace(getTemplatePath(filesMap, "index"), "index", "actions", 1)
+
+		// create actions file
+		err := createTemplate(ACTIONS_EMPTY_TEMPLATE, templatePath, map[string]string{})
+		if err != nil {
+			return "", err
+		}
+
+		return templatePath, nil
+	}
+
+	return "", nil
 }
 
 func appendLinesToObj(lines *[]string, linesToAppend *[]string) {
 	const CLOSE_OBJ_LINE = `^\};$`
+	const OBJ_START_LINE = `const\s\w+(:\s\w+)?\s=\s{$`
 	const CLOSE_FUNCTION_CURLY_BRACE = "  },"
-
-	var addedComma = false
 
 	if len(*linesToAppend) == 0 {
 		return
@@ -250,11 +286,10 @@ func appendLinesToObj(lines *[]string, linesToAppend *[]string) {
 		// search latest line after close the object
 		if regexp.MustCompile(CLOSE_OBJ_LINE).FindStringSubmatch((*lines)[index]) != nil {
 
-			// this fixes the last line adding a comma at the end of it
-			if !addedComma {
+			if regexp.MustCompile(OBJ_START_LINE).FindStringSubmatch((*lines)[index-2]) == nil {
+				// this fixes the last line adding a comma at the end of it
+				// only in the case that not using the template file
 				(*lines)[index-1] = CLOSE_FUNCTION_CURLY_BRACE
-
-				addedComma = true
 			}
 
 			// insert lines inside object

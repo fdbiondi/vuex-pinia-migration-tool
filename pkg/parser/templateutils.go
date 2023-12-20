@@ -21,11 +21,15 @@ var indexNoGettersTmpl embed.FS
 //go:embed templates/index_state_only.tmpl
 var indexStateOnlyTmpl embed.FS
 
+//go:embed templates/actions_empty.tmpl
+var actionsEmptyTmpl embed.FS
+
 const (
-	DEFAULT_TEMPLATE    string = "templates/index.tmpl"
-	NO_ACTIONS_TEMPLATE string = "templates/index_no_actions.tmpl"
-	NO_GETTERS_TEMPLATE string = "templates/index_no_getters.tmpl"
-	STATE_ONLY_TEMPLATE string = "templates/index_state_only.tmpl"
+	DEFAULT_TEMPLATE       string = "templates/index.tmpl"
+	NO_ACTIONS_TEMPLATE    string = "templates/index_no_actions.tmpl"
+	NO_GETTERS_TEMPLATE    string = "templates/index_no_getters.tmpl"
+	STATE_ONLY_TEMPLATE    string = "templates/index_state_only.tmpl"
+	ACTIONS_EMPTY_TEMPLATE string = "templates/actions_empty.tmpl"
 )
 
 func getFirstKey[K comparable, V any](m map[K]V) K {
@@ -44,45 +48,27 @@ func getTemplate(template string) ([]byte, error) {
 		return indexNoGettersTmpl.ReadFile(NO_GETTERS_TEMPLATE)
 	case STATE_ONLY_TEMPLATE:
 		return indexStateOnlyTmpl.ReadFile(STATE_ONLY_TEMPLATE)
+	case ACTIONS_EMPTY_TEMPLATE:
+		return actionsEmptyTmpl.ReadFile(ACTIONS_EMPTY_TEMPLATE)
 	default:
 		return indexTmpl.ReadFile(DEFAULT_TEMPLATE)
 	}
 }
 
-func createIndexTemplate(filesMap map[string]*os.File, template string) (string, error) {
-	key := getFirstKey(filesMap)
+func getTemplatePath(filesMap map[string]*os.File, filename string) string {
+	var key = getFirstKey(filesMap)
 
-	var storeFilename = strings.Replace(filesMap[key].Name(), key, "index", 1)
-
-	pathSlice := strings.Split(storeFilename, "/")
-	storeName := pathSlice[len(pathSlice)-2]
-
-	data, err := getTemplate(template)
-	if err != nil {
-		return "", err
-	}
-
-	var values = map[string]string{
-		"storeName":          storeName,
-		"storeNameTitleCase": kebabToCamelCase(storeName, true),
-	}
-
-	err = parseTemplate(string(data), storeFilename, values)
-	if err != nil {
-		return "", err
-	}
-
-	return storeName, nil
+	return strings.Replace(filesMap[key].Name(), key, filename, 1)
 }
 
-func parseTemplate(templateStr string, outputPath string, values map[string]string) error {
+func parseTemplate(templateData string, outputPath string, values map[string]string) error {
 	file, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	tmpl := template.Must(template.New("template").Parse(templateStr))
+	tmpl := template.Must(template.New("template").Parse(templateData))
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, values); err != nil {
@@ -92,6 +78,20 @@ func parseTemplate(templateStr string, outputPath string, values map[string]stri
 	err = os.WriteFile(outputPath, buf.Bytes(), 0644)
 	if err != nil {
 		return errors.New("error wrinting file -> " + err.Error())
+	}
+
+	return nil
+}
+
+func createTemplate(templateType string, outputPath string, values map[string]string) error {
+	data, err := getTemplate(templateType)
+	if err != nil {
+		return err
+	}
+
+	err = parseTemplate(string(data), outputPath, values)
+	if err != nil {
+		return err
 	}
 
 	return nil

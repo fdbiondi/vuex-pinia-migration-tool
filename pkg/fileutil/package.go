@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"syscall"
 )
 
@@ -67,7 +68,15 @@ func CopyDirectory(scrDir, dest string) error {
 func Copy(srcFile, dstFile string) error {
 	out, err := os.Create(dstFile)
 	if err != nil {
-		return err
+		destPath := regexp.MustCompile(`(.*)\/(.*)$`).ReplaceAllString(dstFile, "$1")
+		if err := CreateIfNotExists(destPath, 0755); err != nil {
+			return err
+		}
+
+		out, err = os.Create(dstFile)
+		if err != nil {
+			return err
+		}
 	}
 
 	defer out.Close()
